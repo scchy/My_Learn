@@ -736,6 +736,121 @@ class Node():
     def __repr__(self):
         return '{}'.format(self.result)
 
+    def add_node(self, val, node):
+        self.tree[val] = node
+
+    def predict(self, feat):
+        if self.root is True:
+            return self.label
+        return self.tree[feat[self.feature]].predict(feat)
+
+
+class DTree:
+    def __init__(self, epsilon=0.1):
+        self.epsilon = epsilon
+        self._tree = {}
+
+    # 熵
+    @staticmethod
+    def calc_ent(dt):
+        """
+        计算目标的熵
+        """
+        dt_len = len(dt)
+        unqs, inds = np.unique(dt[:, -1], return_counts=True)
+        label_count = {label: value for label, value in zip(unqs, inds)}
+        ent = -sum([(p / dt_len) * np.log2(p / dt_len)
+                    for p in label_count.values()])
+        return ent
+
+    # 经验条件熵
+    def cond_ent(self, dt, col=0):
+        """Scc_hy
+        计算经验熵  
+        param dt: numpy  
+        param col: int 第一个特征  
+        """
+        dt_len = len(dt)
+        unqs, inds = np.unique(dt[:, col], return_counts=True)
+        every_ent_list = []
+        for i, cnt in zip(unqs, inds):
+            indices = dt[:, col] == i
+            dt_tp = dt[:, [col, -1]][indices]
+            # 计算当前特征子集下目标的熵
+            ent_i = calc_ent(dt_tp)
+            p_i = cnt / dt_len
+            every_ent_list.append(ent_i * p_i)
+        return sum(every_ent_list)
+
+    # 信息增益
+    @staticmethod
+    def info_gain(ent, cond_ent):
+        return ent - cond_ent
+
+    def info_gain_train(self, dt):
+        feats = dt.shape[1] - 1
+        ent_target = calc_ent(dt)
+        nodes, nodes_infogian = 0, 0 # 最佳拆分点 
+        for i in range(feats):
+            i_info_gain = info_gain(ent_target, cond_ent(dt, col=i))
+            # 比较大小
+            if nodes_infogian <= i_info_gain:
+                nodes_infogian = i_info_gain
+                nodes = i
+        return (nodes, nodes_infogian)
+
+    def train(self, tr_dt):
+        """
+        param  tr_dt: 训练数据 pd.DataFrame
+        return tree
+        """
+        _, y_tr, features = tr_dt.iloc[:, :-1], tr_dt.iloc[:,-1], tr_dt.columns[:-1]
+        # 1- 若D中实例属于同一类Ck，则T为单节点树，并将类Ck作为结点的类标记，返回T
+        if len(y_tr.value_counts()) == 1:
+            return Node(root=True, label=y_tr.iloc[0])
+
+        # 2- 若A为空，则T为单节点树，将D中实例树最大的类Ck作为该节点的类标记，返回T
+        ## 如果y就是特征
+        if len(features) == 0:
+            return Node(
+                root=True,
+                label=y_tr.value_counts().sort_values(ascending=False).index[0])
+
+        # 3- 计算最大信息增益 同5.1,Ag为信息增益最大的特征
+        max_feature, max_info_gain = self.info_gain_train(np.array(tr_dt))
+        max_feature_name = features[max_feature]
+        
+        # 4- Ag的信息增益小于阈值eta,则置T为单节点树，并将D中是实例数最大的类Ck作为该节点的类标记，返回T
+        if max_info_gain < self.epsilon:
+            return Node(
+                root=True,
+                label=y_train.value_counts().sort_values(
+                    ascending=False).index[0])
+
+        # 5- 构建Ag子集
+        node_tree = Node(
+            root=False, feature_name=max_feature_name, feature=max_feature)
+        feature_list = tr_dt[max_feature_name].value_counts().index
+        for f in feature_list:
+            sub_train_df = tr_dt.loc[tr_dt[max_feature_name] == f].drop([max_feature_name], axis=1)
+            # 6, 递归生成树
+            sub_tree = self.train(sub_train_df)
+            node_tree.add_node(f, sub_tree)
+        return node_tree
+
+    def fit(self, tr_dt):
+        self._tree = self.train(tr_dt)
+        return self._tree
+
+    def predict(self, x_te):
+        return self._tree.predict(x_te)
+
+
+datasets, labels = create_data(False)
+data_df = pd.DataFrame(datasets, columns=labels)
+dt = DTree()
+tree = dt.fit(data_df)
+
 
 
 
