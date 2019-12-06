@@ -61,7 +61,7 @@ def create_data(return_numpy=True):
         data = np.array(df.iloc[:100, :])
         out_1, out_2 = data[:, :-1], data[:, -1]
     else:
-        out_1, out_2 = df.iloc[:100, :-1], df.iloc[:100, -1]
+        out_1, out_2 = df.iloc[:100, :], df.columns 
     return out_1, out_2
 
 
@@ -777,7 +777,7 @@ class DTree:
             indices = dt[:, col] == i
             dt_tp = dt[:, [col, -1]][indices]
             # 计算当前特征子集下目标的熵
-            ent_i = calc_ent(dt_tp)
+            ent_i = self.calc_ent(dt_tp)
             p_i = cnt / dt_len
             every_ent_list.append(ent_i * p_i)
         return sum(every_ent_list)
@@ -789,10 +789,10 @@ class DTree:
 
     def info_gain_train(self, dt):
         feats = dt.shape[1] - 1
-        ent_target = calc_ent(dt)
+        ent_target = self.calc_ent(dt)
         nodes, nodes_infogian = 0, 0 # 最佳拆分点 
         for i in range(feats):
-            i_info_gain = info_gain(ent_target, cond_ent(dt, col=i))
+            i_info_gain = self.info_gain(ent_target, self.cond_ent(dt, col=i))
             # 比较大小
             if nodes_infogian <= i_info_gain:
                 nodes_infogian = i_info_gain
@@ -846,12 +846,12 @@ class DTree:
         return self._tree.predict(x_te)
 
 
-datasets, labels = create_data(False)
+datasets, labels = create_data()
 data_df = pd.DataFrame(datasets, columns=labels)
 dt = DTree()
-tree = dt.fit(data_df)
-
-
+dt.fit(data_df)
+dt._tree
+dt.predict(['老年', '否', '否', '一般'])
 
 
 ## 5.3 sklearn 实例
@@ -872,7 +872,8 @@ def Tree_graph(decision_tree, feature_names, class_names,  file_root):
     return graph.write_pdf(file_root)
 
 
-x, y = create_data(False)
+x_all, label = create_data(False)
+x, y = x_all.iloc[:, :-1], x_all.iloc[:, -1]
 x_tr, x_te, y_tr, y_te = train_test_split(x, y, test_size=0.3)
 
 clf = DecisionTreeClassifier()
