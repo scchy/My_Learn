@@ -28,3 +28,16 @@ def create_pair(record):
 
 def add_pair(a, b):
     return a[0]+b[0], a[1]+b[1]
+
+if __name__ == '__main__':
+    spark = SparkSession.builder.appName('rdd_creation_from_csv').getOrCreate()
+    fil_name = r'E:\Work_My_Asset\pyspark_algorithms\chap1\name_city_age.csv'
+
+    rdd = spark.sparkContext.textFile(fil_name)
+    print("rdd =",  rdd)
+    print("rdd.count = ",  rdd.count())
+    print("rdd.collect() = ",  rdd.collect())
+    average_per_city  = rdd.map(create_pair).reduceByKey(lambda x, y: add_pair(x, y))\
+        .mapValues(lambda pair : float(pair[0]) / float(pair[1]))
+    print(average_per_city.collect())
+    spark.stop()
