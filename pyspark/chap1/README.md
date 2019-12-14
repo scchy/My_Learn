@@ -1,4 +1,4 @@
-[toc]
+@[toc]
 
 # 一、基本操作
 ```python
@@ -79,7 +79,7 @@ spark.sql('select * from global_temp.people').show()
 spark.stop()
 ```
 ### 1.3.2 rdd操作
-```
+```python
 def compute_stats(num_dt):
     avg = stat.mean(num_dt)
     median = stat.median(num_dt)
