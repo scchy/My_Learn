@@ -7,7 +7,7 @@
 
 import sys, os
 from pyspark.sql import SparkSession
-
+import collections 
 
 def create_pair(record):
     tokens = record.split(',')
@@ -31,6 +31,22 @@ if __name__ == '__main__':
     # 增加groupByKey
     words_count_group = words.map(lambda x: (x, 1)).groupByKey().mapValues(lambda x : sum(x))
     print("words_count_group.collect(): ", words_count_group.collect())
+    
+    # 增加sort 
+    words_count_sort = words_count.sortBy(lambda x: x[1], ascending = False)
+    print("words_count_sort.collect(): ", words_count_sort.collect())
+    
+    # 增加filter
+    filtered = words_count.filter(lambda x: x[1] > 2)
+    print("filtered.collect(): ", filtered.collect())
+    
+    # 增加python 读取方法
+    f = open(fil_name)
+    f_list =  f.read().replace('\n', ' ').split(' ')
+    count_dict = collections.Counter(f_list)
+    print(count_dict)
+    f.close()
+
     spark.stop()
 
 
