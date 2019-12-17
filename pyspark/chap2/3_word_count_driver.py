@@ -14,6 +14,7 @@ def create_pair(record):
     return (str(tokens[0]), int(tokens[1]))
 
 
+
 if __name__ == '__main__':
     spark = SparkSession.builder.appName('Wod-Count-App').getOrCreate()
     fil_name = r'E:\Work_My_Asset\pyspark_algorithms\chap1\sample_file.txt'
@@ -27,6 +28,9 @@ if __name__ == '__main__':
     words_count = words.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
     print("words_count.count(): ", words_count.count())
     print("words_count.collect(): ", words_count.collect())
+    # 增加groupByKey
+    words_count_group = words.map(lambda x: (x, 1)).groupByKey().mapValues(lambda x : sum(x))
+    print("words_count_group.collect(): ", words_count_group.collect())
     spark.stop()
 
 
