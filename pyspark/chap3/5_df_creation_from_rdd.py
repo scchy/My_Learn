@@ -30,5 +30,5 @@ if __name__ == '__main__':
     print("df.collect() = ", df.collect())
     df.show()
     df.printSchema()
-
+    
     spark.stop()
