@@ -8,7 +8,8 @@
 import sys, os
 from pyspark.sql import SparkSession
 from pyspark import StorageLevel
-
+# 增加defaultdict
+from collections import defaultdict
 
 def process_FASTA_record(fasta_record):
     key_value_list = []
@@ -24,6 +25,32 @@ def process_FASTA_record(fasta_record):
     return key_value_list
 
 
+def process_FASTA_as_hashmap(fasta_record):
+    if (fasta_record.startswith(">")):
+        return [("z", 1)]
+    #
+    hashmap = defaultdict(int)
+    chars = fasta_record.lower()
+    #
+    for c in chars:
+        hashmap[c] += 1
+
+    key_value_list = [(k, v) for k, v in hashmap.items()]
+
+    print("key_value_list=", key_value_list)
+    """
+    key_value_list= [('a', 8), ('t', 3), ('c', 6)]
+    key_value_list= [('a', 6), ('g', 3), ('c', 8), ('t', 4)]
+    key_value_list= [('g', 18), ('c', 11), ('a', 13), ('t', 10)]
+    key_value_list= [('g', 2), ('a', 4), ('t', 2), ('c', 4)]
+    key_value_list= [('c', 8), ('g', 2), ('t', 7), ('a', 17)]
+    key_value_list= [('a', 3), ('g', 10), ('c', 4), ('t', 7)]
+    key_value_list= [('g', 16), ('c', 16), ('a', 18), ('t', 10), ('n', 2)]
+    """
+    return  key_value_list
+
+
+
 if __name__ == '__main__':
     spark = SparkSession.builder.appName('DNA_FASTA').getOrCreate()
     fil_name = r'E:\Work_My_Asset\pyspark_algorithms\chap1\sample.fasta'
@@ -32,6 +59,9 @@ if __name__ == '__main__':
     print("rdd.count = ",  rdd.count())
     print("rdd.collect() = ",  rdd.collect())
     pair_rdd = rdd.flatMap(lambda r: process_FASTA_record(r)) # piplinerdd
+
+    pair_rdd1 = rdd.flatMap(lambda r: process_FASTA_as_hashmap(r))
+    print(pair_rdd1.collect())
     freq_rdd = pair_rdd.groupByKey().mapValues(lambda x: sum(x))
     # freq_rdd = pair_rdd.reduceBykey(lambda x,y: x+y)
     print('freq_rdd.collect(): ', freq_rdd.collect())
