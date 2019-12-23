@@ -24,3 +24,16 @@ def process_FASTA_record(fasta_record):
     return key_value_list
 
 
+if __name__ == '__main__':
+    spark = SparkSession.builder.appName('DNA_FASTA').getOrCreate()
+    fil_name = r'E:\Work_My_Asset\pyspark_algorithms\chap1\sample.fasta'
+
+    rdd = spark.sparkContext.textFile(fil_name)
+    print("rdd.count = ",  rdd.count())
+    print("rdd.collect() = ",  rdd.collect())
+    pair_rdd = rdd.flatMap(lambda r: process_FASTA_record(r)) # piplinerdd
+    freq_rdd = pair_rdd.groupByKey().mapValues(lambda x: sum(x))
+    # freq_rdd = pair_rdd.reduceBykey(lambda x,y: x+y)
+    print('freq_rdd.collect(): ', freq_rdd.collect())
+    
+    spark.stop()
