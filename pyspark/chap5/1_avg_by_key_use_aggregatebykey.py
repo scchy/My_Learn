@@ -43,6 +43,14 @@ if __name__ == '__main__':
     )
     print("sum_count.collect() = ", sum_count.collect())
     
+    sum_count1 = rdd_pair.combineByKey(
+        lambda values_: (values_, 1), # createCombiner
+        lambda combined, values_: (combined[0] + values_, combined[1] + 1), # 在combined中叠加
+        lambda values_, cnts: (values_[0] + cnts[0], values_[1]+cnts[1])  # reduce
+    )
+    print("sum_count1.collect() = ", sum_count1.collect())
+
+
     averages = sum_count.mapValues(lambda v_tuple: float(
         v_tuple[0]) / float(v_tuple[1]))
     print("averages.collect() = ", averages.collect())
