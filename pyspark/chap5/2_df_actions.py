@@ -93,4 +93,10 @@ if __name__ == '__main__':
     df5 = spark.sql(
         "SELECT name, count(*) as namecount FROM people GROUP BY name")
     df5.show()    
+    
+    # -------------------------------
+    # 6- withColumn
+    # -------------------------------
+    df_withcol = df1.withColumn('age2', df1.age + 2)
+    df_withcol.show()
     spark.stop()
