@@ -173,6 +173,19 @@ if __name__ == '__main__':
 
     min_max_count_rdd = rdd_em.mapPartitions(min_max_count)
     print("min_max_count_rdd.collect() = ", min_max_count_rdd.collect())
+    
+    # -------------------------------
+    # 8- sortBy
+    # -------------------------------
+    pairs = [(10, "z1"), (1, "z2"), (2, "z3"), (9, "z4"), (3, "z5"), (4, "z6"), (5, "z7"), (6, "z8"), (7, "z9")]
+    rdd_st = spark.sparkContext.parallelize(pairs)
+    print('值排序，倒序', rdd_st.sortBy(lambda x:x[1], ascending = False).collect())
+    print('主键排序，倒序', rdd_st.sortByKey(ascending=False).collect())
+    # -------------------------------
+    # 9- takeOrdered
+    # -------------------------------
+    bottom3 = rdd_st.takeOrdered(3, key=lambda x: -x[0]) # return list
+    print("bottom3 = ", bottom3)
 
     spark.stop()
     
