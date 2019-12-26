@@ -38,6 +38,48 @@ def tokenize(record):
     return mylist
 
 
+def minmax(iterator):
+    first_time = 0
+    for x in iterator:
+        if (first_time == 0):
+            min_ = x
+            max_ = x
+            first_time = 1
+        else:
+            if x > max_:
+                max_ = x
+            if x < min_:
+                min_ = x
+        #end-if
+    #end-for
+    return (min_, max_)
+
+
+def min_max_count(iterator: iter) -> list:
+    try:
+        n = 0
+        for ite_i in iterator:
+            n += 1
+            numbers = ite_i.split(",")
+            # convert strings to integers
+            numbers = list(map(int, numbers))
+            print(numbers)
+            if n == 1 :
+                local_min = min(numbers)
+                local_max = max(numbers)
+                local_count = len(numbers)
+            else: # 处理partition小于时
+                if local_min > min(numbers):
+                    local_min = min(numbers)
+                if local_max < min(numbers):
+                    local_max = min(numbers)
+                local_count += len(numbers)
+        return [(local_min, local_max, local_count)]
+    except : # 处理partition 为空时
+        # WHERE min > max to filter it out later
+        return [(1, -1, 0)]
+
+
 
 if __name__ == '__main__':
     spark = SparkSession.builder.appName('rdd_transformation').getOrCreate()
@@ -107,6 +149,30 @@ if __name__ == '__main__':
     # -------------------------------
     # 7- mapPartitions
     # -------------------------------
+    numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    rdd = spark.sparkContext.parallelize(numbers, 3) # 3 partition
+    print(rdd.collect())
+    rdd.foreachPartition(lambda x: [print(i) for i in x])
+    minmax_rdd = rdd.mapPartitions(minmax)
+    print(minmax_rdd.collect())
+    ## 7.12空的partition
+    numbers = ["10,20,3,4",
+               "3,5,6,30,7,8",
+               "4,5,6,7,8",
+               "3,9,10,11,12",
+               "6,7,13",
+               "5,6,7,12",
+               "5,6,7,8,9,10",
+               "11,12,13,14,15,16,17"]
+    print("numbers = ", numbers)
 
+    rdd_em = spark.sparkContext.parallelize(numbers, 10)
+    # print("rdd_em.getNumPartitions() = ", rdd_em.getNumPartitions())
+    # rdd_em.foreachPartition(lambda x:  print(x))
+    # rdd_em.foreachPartition(lambda x: [print(i) for i in x])
+
+    min_max_count_rdd = rdd_em.mapPartitions(min_max_count)
+    print("min_max_count_rdd.collect() = ", min_max_count_rdd.collect())
 
     spark.stop()
+    
