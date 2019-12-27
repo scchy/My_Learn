@@ -54,9 +54,9 @@ if __name__ == '__main__':
     # 2- combineByKey
     # ---------------------------
     sum_count1 = rdd_pair.combineByKey(
-        lambda values_: (values_, 1), # createCombiner
-        lambda combined, values_: (combined[0] + values_, combined[1] + 1), # 在combined中叠加
-        lambda values_, cnts: (values_[0] + cnts[0], values_[1]+cnts[1])  # reduce
+        lambda values_: (values_, 1), # createCombiner 转换为我们想要的数据格式
+        lambda combined, values_: (combined[0] + values_, combined[1] + 1), # 在combined是创建的数据格式，values_是原始数据
+        lambda comb0, comb1: (comb0[0] + comb1[0], comb0[1]+comb1[1])  # reduce
     )
     print("combineByKey： sum_count1.collect() = ", sum_count1.collect())
 
