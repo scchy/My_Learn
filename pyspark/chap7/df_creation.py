@@ -65,5 +65,11 @@ if __name__ == '__main__':
                     .drop('food').drop('price')
     df_coll_need.show(truncate=False)
 
+    # ---------------------------
+    # 3- 单列聚合 agg() + dict
+    # ---------------------------
+    df.groupBy("name").agg({'price': 'mean'}).show()
+    df.groupBy("name").agg({'price': 'max'}).show()
+
     spark.stop()
 
