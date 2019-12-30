@@ -31,16 +31,16 @@ if __name__ == '__main__':
     # ---------------------------
     # 1- 添加字段
     # ---------------------------
-    # ## 1.1 简单添加
-    # df_with = df.withColumn("x4", lit(0)).withColumn("x5", exp("x3"))
-    # df_with.show()
-    # ## 1.2 left join + rename | rand()
-    # other_data = [(100, "foo1"), (100, "foo2"), (200, "foo")]
-    # other_df = spark.createDataFrame(other_data, ("k", "v"))
-    # df_with_x6 = df_with.join(other_df, df_with.x1 == other_df.k, 'leftouter')\
-    #               .drop('k').withColumnRenamed('v', 'x6')
-    # df_with_x6.show()
-    # df_with_x6.withColumn("x8", rand()).show()
+    ## 1.1 简单添加
+    df_with = df.withColumn("x4", lit(0)).withColumn("x5", exp("x3"))
+    df_with.show()
+    ## 1.2 left join + rename | rand()
+    other_data = [(100, "foo1"), (100, "foo2"), (200, "foo")]
+    other_df = spark.createDataFrame(other_data, ("k", "v"))
+    df_with_x6 = df_with.join(other_df, df_with.x1 == other_df.k, 'leftouter')\
+                  .drop('k').withColumnRenamed('v', 'x6')
+    df_with_x6.show()
+    df_with_x6.withColumn("x8", rand()).show()
 
     # ---------------------------
     # 2- aggregate_multiple_columns
