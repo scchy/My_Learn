@@ -9,15 +9,19 @@ import sys, os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import lit, exp, rand,  expr
 from pyspark.sql.functions import udf
-from pyspark.sql.types import ArrayType, StringType, DoubleType, StructType, StructField
+from pyspark.sql.types import ArrayType, StringType, DoubleType, StructType, StructField, LongType
+
+from pyspark.sql import Row
+import pandas as pd
+
+def m_sqrt(n):
+    return n * n
+
 
 zip_ = udf(
     lambda xs, ys: list(zip(xs, ys)),
     ArrayType(StructType([StructField('_1', StringType()), StructField('_2', DoubleType())]))
 )
-
-
-
 
 
 
@@ -71,5 +75,64 @@ if __name__ == '__main__':
     df.groupBy("name").agg({'price': 'mean'}).show()
     df.groupBy("name").agg({'price': 'max'}).show()
 
+    
+    # ---------------------------
+    # 4- udf
+    # ---------------------------
+    data = [('alex', 5), ('jane', 7), ('bob', 9)]
+    df_udf = spark.createDataFrame(data, ['name', 'age'])
+    sqrt_udf = udf(m_sqrt, LongType())
+    df_udfed = df_udf.select('name', 'age', sqrt_udf('age').alias('age_sqrt'))
+    df_udfed.show()
+
+    # ---------------------------
+    # 5- df from pandas 
+    # ---------------------------
+    pd_df = pd.DataFrame(
+        data={
+            'integers': [2, 5, 7, 8, 9],
+            'floats': [1.2, -2.0, 1.5, 2.7, 3.6],
+            'int_arrays': [[6], [1, 2], [3, 4, 5], [6, 7, 8, 9], [10, 11, 12]]
+        }
+    )
+    spark_df = spark.createDataFrame(pd_df)
+    spark_df.show()
+    # 转回pandas 
+    pandas_df = spark_df.toPandas()
+    print("pandas_df = \n", pandas_df)
+    ## Orderby 
+    spark_df.orderBy(spark_df.integers.desc()).show()
+    spark_df.orderBy(spark_df.floats, spark_df.integers.desc()).show()
+    
+    # ---------------------------
+    # 6- df from Row
+    # ---------------------------
+    dpt1 = Row(id='100', name='Computer Science')
+    dpt2 = Row(id='200', name='Mechanical Engineering')
+    dpt3 = Row(id='300', name='Music')
+    dpt4 = Row(id='400', name='Sports')
+    dpt5 = Row(id='500', name='Biology')
+
+    Employee = Row("first_name", "last_name", "email", "salary")
+    employee1 = Employee('alex', 'smith', 'alex@berkeley.edu', 110000)
+    employee2 = Employee('jane', 'goldman', 'jane@stanford.edu', 120000)
+    employee3 = Employee('matei', None, 'matei@yahoo.com', 140000)
+    employee4 = Employee(None, 'eastwood', 'jimmy@berkeley.edu', 160000)
+    employee5 = Employee('betty', 'ford', 'betty@gmail.com', 130000)
+
+    dpt_emp1 = Row(department=dpt1, employees=[employee1, employee2, employee5])
+    dpt_emp2 = Row(department=dpt2, employees=[employee3, employee4])
+    dpt_emp3 = Row(department=dpt3, employees=[employee1, employee4])
+    dpt_emp4 = Row(department=dpt4, employees=[employee2, employee3])
+    dpt_emp5 = Row(department=dpt5, employees=[employee5])
+    # 查看
+    print("dpt1=", dpt1)
+    print("employee1=", employee1)
+    print("dpt_emp1=", dpt_emp1)
+    # 创建df
+    dpt_emt_list = [eval('dpt_emp{}'.format(i)) for i in range(1, 6)]
+    df_row = spark.createDataFrame(dpt_emt_list)
+    df_row.show(truncate=False)
+    
     spark.stop()
 
