@@ -135,4 +135,3 @@ if __name__ == '__main__':
     df_row.show(truncate=False)
     
     spark.stop()
-
