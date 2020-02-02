@@ -1,0 +1,33 @@
+# python 3.6
+# author(learning): Scc_hy
+# original url: https://github.com/mahmoudparsian/pyspark-algorithms/blob/master/code/chap08/datasource_textfile_writer.py
+# # create date: 2020-02-02
+# function: datasource_textfile_writer
+# data: 
+
+
+import sys, os
+from pyspark.sql import SparkSession, SQLContext
+
+
+# System.setProperty("hadoop.home.dir", "c:\\winutils\\") # java
+# https://blog.csdn.net/ydc321/article/details/52351151
+
+
+if __name__ == '__main__':
+    spark = SparkSession.builder.appName('datasource_textfile_writer')\
+        .getOrCreate()
+    out_fil_name = r'E:\Work_My_Asset\pyspark_algorithms\chap1\out_write.txt'
+
+    data = [ 'data element {}'.format(i) for i in range(1,5)]
+    records = spark.sparkContext.parallelize(data)
+    print("records.collect() = ", records.collect())
+
+    # 1- 存储 (目前在windows下报错 还未解决)
+    records.repartition(1).saveAsTextFile(out_fil_name) #  repartition(1) 直接存为text文件
+    # 2- 再读取
+    loaded_records = spark.sparkContext.textFile(out_fil_name)
+    print("loaded_records.collect() = ", loaded_records.collect())
+
+    spark.stop()
+
