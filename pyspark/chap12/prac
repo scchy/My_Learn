@@ -1,0 +1,87 @@
+# python 3.6
+# author(learning): Scc_hy
+# original url: https://github.com/mahmoudparsian/pyspark-algorithms/blob/master/code/chap12/average_monoid_use_aggregatebykey.py
+# create date: 2020-03-01
+# function: average_monoid 
+# data: https://github.com/mahmoudparsian/pyspark-algorithms/blob/master/code/chap12/sample_input.txt
+
+
+
+import sys, os
+from pyspark.sql import SparkSession, SQLContext
+from os.path import isfile, join
+from collections import Counter
+
+
+def create_pair(record):
+    tokens = record.split(',')
+    return tokens[0], int(tokens[1])
+
+
+def create_reducepair(record):
+    tokens = record.split(',')
+    return tokens[0], (int(tokens[1]), 1)
+
+def add_pairs(a, b):
+    return a[0]+b[0], a[1]+b[1]
+
+def create_dna_pair(record):
+    return [(k, v) for k, v in dict(Counter(record.upper())).items()]
+
+if __name__ == '__main__':
+    spark = SparkSession.builder.appName(
+        'average_monoid').getOrCreate()
+
+    input_path = r'E:\Work_My_Asset\pyspark_algorithms\chap1\sample_input.txt'
+    records = spark.sparkContext.textFile(input_path)
+    pairs = records.map(create_pair)
+    # prac1 aggregateByKey
+    # --------------------------------------------
+    sum_count = pairs.aggregateByKey(
+        (0, 0)
+        ,lambda c , v: (c[0] + v, c[1] + 1)
+        , lambda c1, c2: add_pairs(c1, c2)
+    )
+
+    print("agg sum_count.collect():", sum_count.collect())
+
+    # prac2 gp 
+    # --------------------------------------------
+    sum_countg = pairs.groupByKey().mapValues(lambda x :(sum(x), len(x)))
+    print("groupByKey sum_countg.collect():", sum_countg.collect())
+
+    # prac3 combin
+    # --------------------------------------------
+    sum_count1 = pairs.combineByKey(
+        lambda v : (v, 1) # combine单元形式
+        ,lambda c, v: (c[0]+v, c[1]+1)
+        ,lambda c1, c2: add_pairs(c1, c2)
+    )
+    print("combine sum_count.collect():", sum_count1.collect())
+
+    # prac4 reduce
+    # --------------------------------------------
+    sum_count_re = records.map(create_reducepair).reduceByKey(add_pairs)
+    print("reduce sum_count.collect():", sum_count_re.collect())
+
+    avreage_ = sum_count.mapValues(lambda v: v[0]/v[1])
+    print("averages.count(): ", avreage_.count())
+    print("averages.collect(): ", avreage_.collect())
+
+    # prac5 use python func
+    # --------------------------------------------
+    input_path1 = r'E:\Work_My_Asset\pyspark_algorithms\chap1\dna.txt'
+    pairs = spark.sparkContext.textFile(input_path1).flatMap(create_dna_pair)
+    print("pairs.collect():", pairs.collect())
+    pairs_sumcnt = pairs.combineByKey(
+        lambda v: (v, 1)
+        ,lambda c, v: (c[0]+v, c[1]+1)
+        , lambda c1, c2: add_pairs(c1, c2)
+    )
+    print("pairs_sumcnt.collect():", pairs_sumcnt.collect())
+    # 在一条基因链中平均出现次数
+    avg_ = pairs_sumcnt.mapValues(lambda x: x[0]/x[1])
+    print("在一条基因链中平均出现次数:", avg_.collect())
+
+    spark.stop()
+
