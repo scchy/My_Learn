@@ -5,3 +5,5 @@
 2- 统计学习方法:  
 - 通过[黄博的github：https://github.com/fengdu78/lihang-code](https://github.com/fengdu78/lihang-code)学习
 
+3- tf2
+- Tensorflow 2.0从头梳理学习
