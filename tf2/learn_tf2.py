@@ -72,3 +72,22 @@ iteration: 450, loss:-67.60644, w:1.475, b:0.071
 # =======================================================================================================
 #                                           第三章   分类问题
 # =======================================================================================================
+# 0- 加载数据
+## 张量缩放到 -1， 1
+(x, y), (x_val, y_cal ) = datasets.mnist.load_data()
+x = 1 * tf.convert_to_tensor(x, dtype=tf.float32)/255 - 1 
+
+# 1- y值处理
+y = tf.convert_to_tensor(y, dtype=tf.int32)
+y_unique = tf.unique(y).y.shape[0]
+y = tf.one_hot(y, depth = y_unique) # on-hot编码
+print(x.shape, y.shape)
+
+# 2- 构建训练集
+tr_dt = tf.data.Dataset.from_tensor_slices((x, y))
+tr_dt = tr_dt.batch(512) # 批量训练
+
+# 3- 构建模型
+## 3-1 由于线性模型表达能力偏弱，所以需要转化为非线性
+
+
