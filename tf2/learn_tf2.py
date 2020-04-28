@@ -95,6 +95,76 @@ tr_dt = tr_dt.batch(512) # 批量训练
 # =======================================================================================================
 
 
+## 4.1 数据类型
+#------------------------------------------------
+### 4.1.1 数值型
+a = 1.2 
+aa = tf.constant(a)
+type(a), type(aa), tf.is_tensor(aa)
+
+x = tf.constant([1, 2, 3.3])
+x.numpy()
+
+# 可以通过list和np.array 赋值到tensor
+tf.constant([[1, 2, 3],[2,3,4]])
+tf.constant(np.arange(8).reshape((2,2,2)))
+
+### 4.1.2 字符串类型
+a = tf.constant('Hello, Deep Learning')
+a
+tf.strings.lower(a)
+
+tf.strings.lower('Hello, Deep Learning')
+
+### 4.1.3 bool
+a = tf.constant([True, False])
+print(a)
+# 需要注意 类型是 tensor != True
+a == True
+
+
+## 4.2 数值精度
+#------------------------------------------------
+# 保存精度过低时， 数据123456789发生了溢出， 得到了错误的结果，
+# 一般使用 tf.int32, tf.int64精度， 浮点数，一般采用tf.float32
+tf.constant(123456789, dtype=tf.int16) 
+tf.constant(123456789, dtype=tf.int32)
+
+tf.constant(np.pi, dtype=tf.float32)
+tf.constant(np.pi, dtype=tf.float64)
+"""
+对于大部分深度学习算法，一般使用tf.int32, tf.float32 可满足运算精度要求，部分对精度要求较高的算法，
+如强化学习，可以选择使用 tf.int64, tf.float64
+"""
+### 4.2.1 读取精度 & 类型装换
+a = tf.constant(123456789.3, dtype=tf.float16) 
+print(f'before: {a.dtype}', a)
+if a.dtype != tf.float32:
+    a = tf.cast(a, tf.float32)
+
+print(f'after: {a.dtype}', a)
+
+a = tf.constant([True, False])
+tf.cast(a, dtype = tf.int32)
+
+
+## 4.3 待优化张量
+#------------------------------------------------
+"""
+为了区分需要计算梯度信息的张量和不需要计算梯度信息的张量，TensorFlow 增加了一种专门的数据类型来支持梯度信息的记录：
+tf.Variable.
+tf.Variable 类型在普通的张量类型基础张添加了name,trainable等属性标签来支持计算图的构建。由于梯度运算会消耗大量的计算资源
+，而且会自动更新相关参数，对于不需要的优化的张量，如神经网络的输入X,不需要通过tf.Variable封装；相反的，对于需要计算梯度优化的张量，
+如神经网络层的W和b, 需要通过tf.Variable包裹一遍TensorFlow跟踪相关梯度信息
+"""
+a = tf.constant([-1, 0, 1, 2])
+aa = tf.Variable(a)
+aa.name, aa.trainable
+
+tf.Variable([-1, 0, 1, 2])
+# 待优化的张量可看作普通张量的特殊类型，普通张量也可以通过GradientTape.wattch()方法临时加入跟踪梯度信息的列表
+
+
 
 
 
