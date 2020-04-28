@@ -165,6 +165,26 @@ tf.Variable([-1, 0, 1, 2])
 # 待优化的张量可看作普通张量的特殊类型，普通张量也可以通过GradientTape.wattch()方法临时加入跟踪梯度信息的列表
 
 
+## 4.4 张量创建
+#------------------------------------------------
+### 4.4.1 全1 0张量
+tf.zeros([]), tf.ones([])
+tf.zeros([1]), tf.ones([1])
+tf.zeros([2,2]), tf.ones([3,2])
 
+### 4.4.2 创建自定义数值张量
+tf.fill([2,2], 9)
 
+### 4.4.3 创建已知分布的张量
+tf.random.normal([2, 2])
+tf.random.normal([2, 2], mean=10, stddev= 2)
+# 均匀分布张量
+tf.random.uniform([2, 2], minval=0, maxval=10)
+tf.random.uniform([2, 2], minval=0, maxval=100,  dtype=tf.int32)
+
+### 4.4.5 创建序列
+tf.range(10, delta=2)
+
+## 4.5 张量的典型应用
+#------------------------------------------------
 
