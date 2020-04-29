@@ -171,6 +171,8 @@ tf.Variable([-1, 0, 1, 2])
 tf.zeros([]), tf.ones([])
 tf.zeros([1]), tf.ones([1])
 tf.zeros([2,2]), tf.ones([3,2])
+a = tf.constant([[1,2], [3,4]])
+tf.zeros_like(a)
 
 ### 4.4.2 创建自定义数值张量
 tf.fill([2,2], 9)
@@ -187,4 +189,49 @@ tf.range(10, delta=2)
 
 ## 4.5 张量的典型应用
 #------------------------------------------------
+### 4.5.1 标量
+"""
+维度0， shape为[]
+标量的典型用途之一是误差值的表示、各种测量指标的表示，如acc,precision, recall
+"""
+out = tf.random.uniform([4, 10])
+y = tf.constant([2, 3, 2,0])
+y = tf.one_hot(y, depth=10)
+loss = tf.keras.losses.mse(y, out)
+loss = tf.reduce_mean(loss)
+print(loss)
+
+### 4.5.2 向量
+z = tf.random.normal([4, 2])
+b = tf.zeros([2]) # 设置偏置向量
+z = z + b         # 添加偏置
+"""
+通过高层接口类Dense()方式创建的网络层，张量W和b存储在类的内部，由类自动创建并管理。
+
+可以通过全连接层的bias成员比那里查看偏置b，例如创建输入节点数为4，输出节点数为3的线性层网络
+，那么它的偏置向量的程度为3：
+"""
+from tensorflow.keras import layers 
+fc = layers.Dense(3) # 创建一层wx+b， 输出节点为3 
+# 通过build函数创建w, b张量，输入节点为4
+fc.build(input_shape=(2, 4))
+fc.bias
+
+### 4.5.3 矩阵
+x = tf.random.normal([2, 4])
+w = tf.ones([4, 3]) # 因为输出是三所以需要三列的 w 
+b = tf.zeros([3])
+o = x@w + b
+"""
+x，w 张量均为矩阵，x@w+b网络层称为线性层，在tf中可以通过Dense类直接实现，
+Dense层也称为全连接层。 我们通过Dense类创建输入 4 个节点， 输出3个节点的网络层， 
+可以通过全连接层的 kernel成员名查看其权重矩阵W
+"""
+fc = layers.Dense(3)  # 定义全连接层的输出节点为3 
+fc.build(input_shape=(2, 4))
+fc.kernel # w 
+
+
+### 4.5.4 维张量
+
 
