@@ -232,6 +232,60 @@ fc.build(input_shape=(2, 4))
 fc.kernel # w 
 
 
-### 4.5.4 维张量
+### 4.5.4 3维张量
+"""
+典型应用是标识序列信号，格式为：
+X = [b, sequence len, feature len]
+b标识序列信号的数量
+squence len 表示序列信号在时间维度上的采样点数
+feature len 标识每个点的特征长度
+
+考虑自然语言处理中句子的表示，如评价句子的是否为正面情绪的情感分类任务网络
+为了能够方便字符串被神经网络处理，一般将单词通过嵌入层(embeding layer)编码为固定长度的向量
+比如'a' 编码为某个长度3的向量，那么2个等长（单词为5）的句子序列可以表示为
+[2, 5, 3]的3维张量
+"""
+(x_tr, y_tr), (x_te, t_te) = tf.keras.datasets.imdb.load_data(num_words=10000)
+x_tr = tf.keras.preprocessing.sequence.pad_sequences(x_tr, maxlen=80)
+x_tr.shape
+# 可以看到，其中25000表示句子个数，80表示每个句子共80个单词， 每个单词使用数字编码方式。
+# 可以通过layers.Embedding层将数字编码的单词换换为程度为100个词向量
+embedding = tf.keras.layers.Embedding(10000, 100)
+out = embedding(x_tr)
+out.shape
+# 可以看到，经过Embedding层编码后，句子张量的shape变为[25000, 80, 100]
+# 其中100表示每个单词编码为长度100的向量
+"""
+对于特征长度为1 的序号， 比如商品价格在60天内的变化曲线， 只需要一个标量即可表示商品的价格，
+因此2件商品的价格变化趋势可以使用shape为[2, 60], 为了统一格式，将价格变化趋势表达为 [2, 60,1]
+1为一个特征长度
+"""
+
+### 4.5.5 4维张量
+"""
+4维张量在卷积神经网络中应用的非常广泛，它统御保存特征图数据一般定义为：
+[b, h, w, c]
+b是输入的数量，h/w分别便是特征图的高宽，c表示特征图的通道数
+
+"""
+# 创建 32*32 的彩色图片输入，个数为4
+x = tf.random.normal([4, 32, 32, 3])
+# 创建卷积神经网络
+layer = tf.keras.layers.Conv2D(16, kernel_size=3)
+out = layer(x)
+out.shape
+layer.kernel.shape
+
+## 4.6 索引&切片
+#------------------------------------------------
+x = tf.random.normal([4, 32, 32, 3])
+x[0][1]
+x[0, 1]
+
+x[1:3]
+# ... 多个维度全取
+x[0:2,...,1:]  # 1-2张图片的 G/B通道数据
+
+
 
 
