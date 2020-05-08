@@ -144,7 +144,17 @@ tf.math.log(x) / tf.math.log(2.0)
 
 
 ### 4.9.4 矩阵相乘
+## tf.matmul(a, b) <=> a@b
+"""
+tf 的矩阵相乘可以进行批量形式
+"""
+import tensorflow as tf
+a = tf.reshape(tf.range(24), [2,3,4])
+b = tf.reshape(tf.range(0, 24), [2,4,3])
 
+a@b
+# Broadcasting 
+tf.matmul(a, b)
 
 
 
