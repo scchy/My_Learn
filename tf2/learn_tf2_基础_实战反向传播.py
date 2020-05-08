@@ -1,3 +1,8 @@
+# python 3.6
+# tf2.0
+# Author:Scc_hy
+# Create date: 2020-05-08
+# Refrence: https://www.icode9.com/content-4-601528.html
 
 ## 4.10 前向传播实战
 ### 三层神经网络的实现
