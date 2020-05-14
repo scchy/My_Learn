@@ -124,6 +124,115 @@ w1 + b1 + w2 + b2 + w3 + b3 + w4 + b4
 
 """
 
+
+
 # 6.4 激活函数
 # ------------------------------------------------
+## 6.4.1 Sigmod 
+"""
+sigmoid: = 1/(1+e^-x)
+相对于跃阶函数，可以直接利用梯度下降算法优化网络参数，应用的非常广泛
+"""
+import tensorflow as tf
+x = tf.linspace(-6.0, 6.0, 10)
+tf.nn.sigmoid(x)
+
+## 6.4.2 ReLU
+"""
+修正线性单元，
+Sigmoid函数在输入值较大或较小时，容易出现梯度值接近0的现象，称为梯度弥散现象，使得网络参数长时间得不到更新，
+很难训练较深层次的网络模型。
+ReLU:= max(0, x)
+
+2001年，神经科学家Dayan和Abott模拟得出更加精确的脑神经源激活模型，
+它具有单侧抑制、相对宽松的兴奋边界等特性，
+"""
+tf.nn.relu(x)
+
+
+## 6.4.3 LeakyReLU
+"""
+ReLU 函数在 x<0时梯度值恒为0， 也可能或造成梯度弥散现象，为了克服这个问题，
+LeakyReLU函数被提出，
+
+LeakyReLU={X X>=0; P*X X<0}
+
+"""
+tf.nn.leaky_relu(x, alpha =0.1)
+
+
+
+## 6.4.4 Tanh
+"""
+tanh(x) = (e^x - e^-x) / (e^x + e-x)
+= 2 * sigmoid(2x) - 1
+
+"""
+tf.nn.tanh(x)
+
+# 6.5 输出层设计
+# ------------------------------------------------
+"""
+o <- R^d 输出属于整个实数空间， 或者某段普通的实数空间， 比如函数值趋势的预测
+o <- [0, 1] 输出值特别地落地在[0,1]的区间， 如二分类的问题的概率
+o <- [0, 1] 输出值落在[0, 1]的区间， 并且所有输出值之和为1， 常见的如多分类问题
+o <- [-1, 1]
+"""
+## 6.5.1  普通实数空间
+"""
+像正弦函数曲线预测、年的预测、股票走势的预测等
+输出层可以不加激活函数。误差的计算直接基于最后一层的
+输出o与真实值y进行计算，如采用均方差误差函数度量输出值o与真实值y之间的距离
+L = g(o, y)
+
+"""
+
+## 6.5.2 [0,1]区间
+"""
+如果直接输出，会分布在实数空间，所以需要添加某个合适的激活函数
+如Sigmoid,
+同样的，对于二分类问题，如硬币的正反面的预测，输出层可以只需要一个节点，
+某个事件A发生概率P(A|x)。如果我们把网络的输出o表示正面事件出现的概率，
+那么反面事件出现的概率为 1-o，
+P(正面|x) = o
+p(反面|x) 1-o
+
+"""
+## 6.5.3 [0,1]区间
+"""
+P(A|x) + P(B|x) + P(C|x) = 1
+用softmax
+o(z_i) = (e^(z_i) ) / sum([e^(z_j) for j in n_out])
+
+
+"""
+def soft_max(x):
+      return tf.exp(x)/tf.reduce_sum(tf.exp(x))
+
+x = tf.constant([2.0, 1.0, 0.1])
+soft_max(x)
+
+tf.nn.softmax(x)
+"""
+与Dense层类似，Softmax函数也可以作为网络层使用， 通过 layers.Softmax(axis=-1)
+在Softmax函数的数值计算过程中，容易因输入值偏大方式数值溢出现象；在计算交叉熵的时候，
+也会出现数值溢出的问题。为了数值计算的稳定性，Tensorflow中提供了一个统一的接口，将Softmax
+与交叉熵损失函数同时实现，同时也处理了数值不问他的异常，一般推荐使用，避免单独使用softmax函数和
+交叉熵损失函数。函数式接口
+tf.keras.losses.categorical_crossentropy(y_true, y_pred, from_logists=False)
+"""
+z = tf.random.normal([2, 10]) # 构造输出层
+y_onehot = tf.constant([1,3])
+y_onehot = tf.one_hot(y_onehot, depth=10)
+# 输出层未使用softmax函数，故from_logits设置为True
+loss = tf.keras.losses.categorical_crossentropy(y_onehot, z, from_logits=True)
+loss = tf.reduce_mean(loss)
+
+## 6.5.4 [-1, 1]
+x = tf.linspace(-6., 6., 10)
+tf.tanh(x)
+
+# 6.6 误差计算
+# ------------------------------------------------
+
 
