@@ -11,6 +11,11 @@ import numpy as np
 # &6 神经网络
 #   - 6.1 感知机
 #   - 6.2 全连接层
+#   - 6.3 神经网络
+#   - 6.4 激活函数
+#   - 6.5 输出层设计
+#   - 6.6 误差计算
+#   - 6.7 神经网络类型
 
 # ========================
 
@@ -232,7 +237,87 @@ loss = tf.reduce_mean(loss)
 x = tf.linspace(-6., 6., 10)
 tf.tanh(x)
 
+
 # 6.6 误差计算
+# MSE = sum((y-o)^2)/n
 # ------------------------------------------------
+## 6.6.1 均方差误差
+o = tf.random.normal([2, 10])
+y = tf.constant([1,3])
+y_onehot = tf.one_hot(y, depth=10)
+#  tf.reduce_mean(tf.square(y_onehot - o), axis=1)
+loss = tf.keras.losses.MSE(y_onehot, o) # 函数返回的是每个样本的均方差
+loss = tf.reduce_mean(loss) # 求一个batch的loss
+loss
+# 或者通过MSE类处理
+criteon = yf.keras.losses.MeanSquaredError()
+loss = criteon(y_onehot, o)
+loss
+
+## 6.6.2 交叉熵
+"""
+熵越大，代表不确定性越大，信息也就越大。
+H(P) = -1*sum([ p_i * np.log2(p_i) for p_i in range(n) ])
+
+对于四分类， y_true = [0, 0, 0, 1]
+H(p(y is 4|x)) = -1*sum([ p_i * np.log2(p_i) for p_i in [0, 0, 0, 1] ]) = 0 # 0的时候取0 
+即不确定性最低
+如果预测时 [0.1, 0.1, 0.1, 0.7]
+-1*sum([ p_i * np.log2(p_i) for p_i in [0.1, 0.1, 0.1, 0.7] ]) = 1.356
+
+如果预测概率是均等的情况下
+-1*sum([ p_i * np.log2(p_i) for p_i in [0.25, 0.25, 0.25, 0.25] ]) = 2.0
+"""
+"""
+交叉熵(Cross Entropy)
+H(p, q) = -sum([p_i * np.log2(q_i) for p_i, q_i in zip(p_lst, q_lst)])
+# 可以分解成p 的墒与 p q 的KL散度的和：
+H(p, q) = H(p) + D_kl(p|q)
+D_kl(p|q) = sum([p_x*np.log2(p_x/q_x) for p_x, q_x in  zip(p_lst, q_lst)])
+
+KL散度是用于衡量2个分布之间距离的指标， p=q时， D_kl(p|q)=0。 交叉熵和KL散度都是不对称的
+H(p, q) != H(q, p)
+D_kl(p|q)  != D_kl(q|p) 
+KL可以很好的衡量2个分布之间的差别，特别的，当分类问题中y的编码分布p采用one-hot 编码时： H(y) = 0
+此时：
+H(y, o) = H(y) + D_kl(y|o) = D_kl(y|o) 
+
+根据KL散度的定义，可以推导出问题中交叉熵的计算表达式：
+H(y, o) = D_kl(y|o) = sum([p_x*np.log2(p_x/q_x) for p_x, q_x in  zip(p_lst, q_lst)])
+y -> y_onhot 由于进行了one-hot编码
+
+H(y, o) = D_kl(y|o) = 1*np.log2(1/oi) = -np.log2(oi)
+可以看到，L只与真实类别i上的概率oi有关，对应概率oi越大，H(y, o)越小，当对应概率为1时， 交叉熵H(y, o)
+取得最小值0，此时网络输出o与真实标签y完全一致，神经网络取得最优状态。
+
+最小化交叉熵的过程也就是最大化政企类别的预测概率的过程。
+"""
+
+
+
+# 6.7 神经网络类型
+# ------------------------------------------------
+"""
+全连接层前向计算简单，梯度求导也较简单，但是它有一个最大的缺陷， 在处理较大特征长度的数据时，
+全连接层的参数往往较大，使得训练深层数的全连接网络比较困难。
+
+"""
+## 6.7.1 卷积神经网络 
+"""
+分析理解图片
+通过利用局部相关性和权值共享的思想
+
+"""
+## 6.7.2 循环神经网络
+"""
+序列信号 文本数据
+
+LSTM网络作为RNN的变形，克服了RNN缺乏长期记忆，不擅长处理长序列的问题，在自然语言处理中得到了广泛的应用。
+基于LSTM谷歌做了Seq2Seq模型，并成功商用于谷歌神经网络及其翻译系统(GNMT)
+
+
+"""
+## 6.7.3 注意力(机制)网络 2017 
+## 6.7.4 图神经网络
 
 
