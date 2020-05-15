@@ -292,6 +292,32 @@ H(y, o) = D_kl(y|o) = 1*np.log2(1/oi) = -np.log2(oi)
 
 最小化交叉熵的过程也就是最大化政企类别的预测概率的过程。
 """
+y = tf.constant([1])
+y_onehot = tf.one_hot(y, depth=3)
+
+def H_p(y_):
+    """
+    计算熵
+    """
+    # 0- 计算熵
+    h_lst = -tf.math.log(y_) / tf.math.log(2.0)
+    # 1- 修正-np.inf
+    # 1-1- 获取非-np.inf位置
+    mask = h_lst.numpy() ==  -np.inf 
+    indices = np.where(mask)
+    # 1-2- 更新-np.inf
+    if sum(mask[0]):
+        update_zero = np.zeros(len(indices))
+        h_lst_update = tf.scatter_nd(indices, update_zero, h_lst.shape)
+    else:
+        h_lst_update = h_lst
+    return tf.reduce_sum(h_lst_update)
+
+a = tf.constant([[0.1, 0.7, 0.2]])
+H_p(a)
+H_p(y_onehot)
+
+
 
 
 
