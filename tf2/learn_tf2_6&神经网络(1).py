@@ -303,8 +303,8 @@ def H_p(y_):
     h_lst = -tf.math.log(y_) / tf.math.log(2.0)
     # 1- 修正-np.inf
     # 1-1- 获取非-np.inf位置
-    mask = h_lst.numpy() ==  -np.inf 
-    indices = np.where(mask)
+    mask = h_lst.numpy() == np.inf 
+    indices = tf.where(mask)
     # 1-2- 更新-np.inf
     if sum(mask[0]):
         update_zero = np.zeros(len(indices))
@@ -317,6 +317,15 @@ a = tf.constant([[0.1, 0.7, 0.2]])
 H_p(a)
 H_p(y_onehot)
 
+def crossentropy(y_, y_p):
+    mask = y_.numpy() ==  1.0
+    indices = tf.where(mask)
+    print(mask, indices)
+    ypi = tf.gather_nd(y_p, indices)
+    out = - tf.math.log(ypi) / tf.math.log(2.0)
+    return tf.constant([0.]) if sum(out.numpy() == np.inf) else out
+
+crossentropy( y_onehot, tf.constant([[0.1, 0.9, 0.2]]) )
 
 
 
