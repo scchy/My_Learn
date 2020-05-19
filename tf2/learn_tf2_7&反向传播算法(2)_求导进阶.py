@@ -90,6 +90,7 @@ w1 = tf.constant(2.)
 b1 = tf.constant(1.)
 w2 = tf.constant(2.)
 b2 = tf.constant(1.)
+y = tf.constant(3.)
 
 # 构建梯度记录器：
 with tf.GradientTape(persistent=True) as tape:
@@ -97,16 +98,54 @@ with tf.GradientTape(persistent=True) as tape:
     tape.watch([w1, b1, w2, b2])
     y1 = x * w1 + b1
     y2 = y1 * w2 + b2
+    loss = 0.5 * tf.square(y2 - y)
 
 # 独立求解各个偏导数
-dy2_dy1 = tape.gradient(y2, [y1])[0] # w2
-dy1_dw1 = tape.gradient(y1, [w1])[0] # x 
-dy2_dw1 = tape.gradient(y2, [w1])[0] # dy2_dy1 *  dy1_dw1 = w2 * x
-dy2_dw1
+dy1_dw1 = tape.gradient(y1, [w1])[0] #  x
+dy2_dy1 = tape.gradient(y2, [y1])[0] #  w2
+dL_dy2 = tape.gradient(loss, [y2])[0] # (y2 - y)
+dL_dw1 = tape.gradient(loss, [w1])[0] # dL_dy2 * dy2_dy1 *  dy1_dw1 = (y2 - y) * w2 * x
+
+print("dL_dw1", dL_dw1)
+print("dL_dy2 * dy2_dy1 *  dy1_dw1", dL_dy2 * dy2_dy1 *  dy1_dw1)
+print("(y2 - y) * w2 * x", (y2 - y) * w2 * x)
 
 
 
 # 7.7 反向传播算法
 # ---------------------------------------------------
+"""
+d(L)/d(wjk) = (ok-t)ok(1-ok)xj = delat_k * xj
+考虑网络倒数第二层的偏导数 d(L)/d(WJ) 
+第二层输出为O_J, 输出层为O_k ,倒数第三层的输出节点数为 I
+
+int_n --> I -- W_ij --> J -- W_jk --> K --> L <--> T
 
 
+令 delta_k = (O_k - t_k) * O_k(1 - O_k) * W_jk 
+
+d(L)/d(W_ij) = (O_k - t_k) * d(O_k) /d(W_ij)
+           = (O_k - t_k) * O_k(1 - O_k) * d(Z_k)/d(W_ij)
+           = (O_k - t_k) * O_k(1 - O_k) * W_jk * d(O_j)/d(W_ij)
+           = delta_k * O_j(1 - O_j)  * d(Z_j)/d(W_ij)
+           = delta_k * O_j(1 - O_j)  * o_i
+
+令 delta_j = delta_k * O_j(1 - O_j)
+d(L)/d(W_ij) = delta_j * o_i
+即 写为当前连接的其实节点的输出信息oi 与终止节点j的梯度信息 delta_j的简单相乘的运算
+
+小结下，每层的偏导数的计算公式：
+# 输出层
+d(L)/d(W_jk) = O_k(1 - O_k) * oj = delta_k * oj
+delta_k = O_k(1 - O_k)
+
+# 倒数第二层
+d(L)/d(W_ij) = O_k(1 - O_k) * oj = delta_k * O_j(1 - O_j)  * o_i = delta_j * o_i
+delta_j = delta_k * O_j(1 - O_j)
+
+# 倒数第三层
+d(L)/d(W_ni) = delta_n * O_n 
+delta_n = delta_j * O_i(1 - O_i)
+
+
+"""
