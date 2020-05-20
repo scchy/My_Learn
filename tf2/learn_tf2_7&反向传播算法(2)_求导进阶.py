@@ -136,16 +136,16 @@ d(L)/d(W_ij) = delta_j * o_i
 
 小结下，每层的偏导数的计算公式：
 # 输出层
-d(L)/d(W_jk) = O_k(1 - O_k) * oj = delta_k * oj
-delta_k = O_k(1 - O_k)
+d(L)/d(W_jk) = (O_k - t_k )O_k(1 - O_k) * oj = delta_k * oj
+delta_k = O_k(1 - O_k) * (O_k - t_k )
 
 # 倒数第二层
-d(L)/d(W_ij) = O_k(1 - O_k) * oj = delta_k * O_j(1 - O_j)  * o_i = delta_j * o_i
-delta_j = delta_k * O_j(1 - O_j)
+d(L)/d(W_ij) = O_k(1 - O_k) * oj = delta_k*wjk *O_j(1 - O_j)  * o_i = delta_j * o_i
+delta_j = delta_k*wjk * O_j(1 - O_j)
 
 # 倒数第三层
 d(L)/d(W_ni) = delta_n * O_n 
-delta_n = delta_j * O_i(1 - O_i)
+delta_n = delta_j*wij * O_i(1 - O_i)
 
 
 """
