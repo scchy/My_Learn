@@ -95,6 +95,7 @@ def make_plot(x, y , title=''):
 make_plot(x, y )
 
 
+
 # np.random.normal(0, 0.1, 2 * 50).reshape(2, 50)
 # np.random.randn(2, 50) * np.sqrt(1/2)
 ## 7.9.2 网络层
@@ -115,6 +116,8 @@ class Layer():
         self.last_activation = None # 激活函数的输出值O
         self.error = None # 用于计算当前层的delta变量的中间变量
         self.delta = None # 记录当前层的delta变量， 用于计算梯度
+        self.error_b = None # 用于计算当前层的delta_b变量的中间变量
+        self.delta_b = None # 记录当前层的delta_b  变量， 用于计算梯度
 
     def activate(self, x):
         # 前向传播
@@ -151,6 +154,8 @@ class Layer():
         return act_r
 
 
+
+
 ## 7.9.3 网络模型
 class NeuralNetwork():
     def __init__(self):
@@ -174,9 +179,11 @@ class NeuralNetwork():
         for i in reversed(range(layer_len)):
             layer = self._layers[i] 
             # 如果是输出层
-            if layer == self._layers[-1]:
+            if layer  == self._layers[-1]:
+                delta_i = layer.apply_activation_derivative(output)
                 layer.error = y - output # L = 0.5* (o - y)**2  d(L) = o - y #所以该项式负向的目前 
-                layer.delta = layer.error * layer.apply_activation_derivative(output)
+                layer.delta = layer.error * delta_i
+                # layer.delta_b = layer.delta
             else:
                 next_layer = self._layers[i + 1]
                 """
@@ -188,9 +195,11 @@ class NeuralNetwork():
                        O_i                  # 上一层输入
                   sigma(j) = error_j * d(o_j)/d(wij)
                 """
+                delta_i = layer.apply_activation_derivative(layer.last_activation)
                 layer.error = np.dot(next_layer.weights, next_layer.delta)
-                layer.delta = layer.error * layer.apply_activation_derivative(layer.last_activation)
-
+                layer.delta = layer.error * delta_i
+                # layer.error_b = np.dot(np.ones(next_layer.weights.shape), next_layer.delta)
+                # layer.delta_b = layer.error_b * delta_i
         # 更新权重
         for i in range(layer_len):
             layer = self._layers[i]
@@ -198,6 +207,8 @@ class NeuralNetwork():
             o_i = np.atleast_2d(x if i == 0 else self._layers[i - 1].last_activation)
             # 梯度下降 因为 d(L)/d(k)  = o -y ，而脚本中是 y - o
             layer.weights += layer.delta * o_i.T * learning_rate
+            # layer.bias += layer.delta_b * learning_rate
+
 
     def train(self, x_train, x_test, y_train, y_test, learning_rate, max_epochs):
         # 网络训练
@@ -210,7 +221,7 @@ class NeuralNetwork():
         mses, accs = [], []
         for i in range(max_epochs + 1):
             for j in range(len(x_train)): # batch=1
-                self.backpropagation(x_train[j], y_train[j], learning_rate)
+                self.backpropagation(x_train[j], y_onehot[j], learning_rate)
             if i % 10 == 0:
                 # 打印mse
                 mse = np.mean(np.square(y_onehot - self.feed_forward(x_train)))
@@ -221,7 +232,7 @@ class NeuralNetwork():
                 acc = self.accuracy(y_test.flatten() , self.predict(x_test)) * 100
                 accs.append(acc/100)
                 print(f'Accuracy: {acc:.2f} %','\n')
-        return mses
+        return mses, accs
 
     def predict(self, x):
         return self.feed_forward(x)
@@ -241,13 +252,23 @@ nn = NeuralNetwork()
 nn.add_layer(Layer(2, 25, 'sigmoid')) # 隐藏层1， 2=>25
 nn.add_layer(Layer(25, 50, 'sigmoid')) # 隐藏层2， 25=>50
 nn.add_layer(Layer(50, 25, 'sigmoid'))
-nn.add_layer(Layer(25, 2))
+nn.add_layer(Layer(25, 2, 'sigmoid'))
 
-
-mses = nn.train(x_tr, x_te, y_tr, y_te, 0.01, 1000)
+mses, accs = nn.train(x_tr, x_te, y_tr, y_te, 0.01, 1000)
 
 x_len = list(range(len(mses)))
-plt.plot(x_len, mses)
+fig, axes = plt.subplots(1,2, figsize = (10, 5))
+axes[0].plot(x_len, mses, c='steelblue', label = 'mse')
+plt.xlabel('Epoch')
+plt.ylabel('MSE')
+plt.legend()
+axes[1].plot(x_len, accs, c='darkred', label = 'acc')
+plt.legend()
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
 plt.show()
-     
+
+
+
+
             
