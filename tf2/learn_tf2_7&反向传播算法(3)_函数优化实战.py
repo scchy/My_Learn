@@ -95,7 +95,8 @@ def make_plot(x, y , title=''):
 make_plot(x, y )
 
 
-
+# np.random.normal(0, 0.1, 2 * 50).reshape(2, 50)
+# np.random.randn(2, 50) * np.sqrt(1/2)
 ## 7.9.2 网络层
 class Layer():
     def __init__(self, n_input, n_out, activation=None, weights=None
@@ -108,13 +109,13 @@ class Layer():
         :param bias: 偏置张量，默认内部生成
         """
         # 通过正态分布获取网络权重
-        self.weights = weights if weights is not None else np.random.randn(n_input, n_out) * np.sqrt(1/n_out)
-        self.bias = bias if bias is not None else np.random.randn(n_out)
+        self.weights = weights if weights is not None else np.random.randn(n_input, n_out) * np.sqrt(1 / n_out)
+        self.bias = bias if bias is not None else np.random.randn(n_out) * 0.1
         self.activation = activation # 激活函数类型，如sigmoid
         self.last_activation = None # 激活函数的输出值O
         self.error = None # 用于计算当前层的delta变量的中间变量
         self.delta = None # 记录当前层的delta变量， 用于计算梯度
-    
+
     def activate(self, x):
         # 前向传播
         r = np.dot(x, self.weights) + self.bias # X@W + b
@@ -132,9 +133,8 @@ class Layer():
             return np.tanh(r)
         elif self.activation == 'sigmoid':
             return 1/(1 + np.exp(-r))
-        else:
-            # 其他的时候也默认 直接输出
-            return r
+        # 其他的时候也默认 直接输出
+        return r
 
     def apply_activation_derivative(self, act_r):
         # 计算激活函数的导数
@@ -147,10 +147,9 @@ class Layer():
             return 1 - act_r ** 2
         elif self.activation == 'sigmoid':
             return act_r * (1 - act_r)
-        else:
-            # 其他的时候也默认 直接输出
-            return np.ones_like(act_r)
-            
+        # 其他的时候也默认 直接输出
+        return act_r
+
 
 ## 7.9.3 网络模型
 class NeuralNetwork():
@@ -166,19 +165,17 @@ class NeuralNetwork():
         for layer in self._layers:
             x = layer.activate(x)
         return x 
-    
+
     def backpropagation(self, x, y, learning_rate):
         # 反向传播算法实现
-        output = self.feed_forward(x) # 最后层输出
-
         ## 从后向前计算梯度 
+        output = self.feed_forward(x) # 最后层输出
         layer_len = len(self._layers)
-        for i in reversed(range(layer_len )):
+        for i in reversed(range(layer_len)):
             layer = self._layers[i] 
             # 如果是输出层
             if layer == self._layers[-1]:
                 layer.error = y - output # L = 0.5* (o - y)**2  d(L) = o - y #所以该项式负向的目前 
-                # 计算最后一层 delta = layer.apply_activation_derivative(output) = 1
                 layer.delta = layer.error * layer.apply_activation_derivative(output)
             else:
                 next_layer = self._layers[i + 1]
@@ -210,19 +207,20 @@ class NeuralNetwork():
         # 索引赋值
         y_onehot[np.arange(y_train.shape[0]), y_train] = 1
         # 计算mse并更新参数
-        mses = []
-        for i in range(max_epochs):
+        mses, accs = [], []
+        for i in range(max_epochs + 1):
             for j in range(len(x_train)): # batch=1
                 self.backpropagation(x_train[j], y_train[j], learning_rate)
-            if i % 50 == 0:
+            if i % 10 == 0:
                 # 打印mse
                 mse = np.mean(np.square(y_onehot - self.feed_forward(x_train)))
                 mses.append(mse)
-                print('\n','=='*60)
-                print(f"Epoch: {i}, MSE: #{mse:.5f}")
+                print('\n','=='*40)
+                print(f"Epoch: # {i}, MSE: {mse:.5f}")
                 # 打印准确率
                 acc = self.accuracy(y_test.flatten() , self.predict(x_test)) * 100
-                print(f'Accuracy: {acc:.2f}','\n')
+                accs.append(acc/100)
+                print(f'Accuracy: {acc:.2f} %','\n')
         return mses
 
     def predict(self, x):
@@ -233,7 +231,7 @@ class NeuralNetwork():
         corrects = sum(y_true == y_pred_max)
         return corrects/y_pred_max.shape[0]
 
-      
+
 n_sample = 2000
 test_rate = 0.3 
 x, y = make_moons(n_sample, noise=0.2, random_state=100)
