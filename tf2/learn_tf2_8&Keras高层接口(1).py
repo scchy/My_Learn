@@ -1,4 +1,3 @@
-
 # python3.6
 # Create date: 2020-05-21
 # Function: 19年11月最新-《TensorFlow+2.0深度学习算法实战教材》
@@ -10,9 +9,9 @@ import numpy as np
 
 # ======== 目录 ==========
 # &8 Keras高层接口
-#   - 8.1 Himmelblau函数优化实战
-
-
+#   - 8.1 常见功能模块
+#   - 8.2 模型装配、训练与测试
+#   - 8.3 模型保存与加载
 # ========================
 
 # =======================================================================================================
@@ -82,6 +81,29 @@ for p in network.trainable_variables:
 然后通过自动求导工具计算梯度并更新，同时间隔性的测试网络的性能。
 """
 
+# 0- 数据加载
+from tensorflow.keras import datasets
+(x, y), (x_val, y_val ) = datasets.mnist.load_data()
+
+def preprocess(x, y):
+    x = tf.cast(x, dtype=tf.float32) / 255.     #先将类型转化为float32，再归一到0-1
+    x = tf.reshape(x, [-1, 28*28])              #不知道x数量，用-1代替，转化为一维784个数据
+    y = tf.cast(y, dtype=tf.int32)              #转化为整型32
+    y = tf.one_hot(y, depth=10)                 #训练数据所需的one-hot编码
+    return x, y
+
+
+train_db = tf.data.Dataset.from_tensor_slices((x, y))
+train_db = train_db.shuffle(60000)      #尽量与样本空间一样大
+train_db = train_db.batch(100)          #128
+train_db = train_db.map(preprocess)
+
+
+test_db = tf.data.Dataset.from_tensor_slices((x_val, y_val))
+test_db = test_db.shuffle(10000)      #尽量与样本空间一样大
+test_db = test_db.batch(100)          #128
+test_db = test_db.map(preprocess)
+
 ## 8.2.1 模型装配
 ### 以 Sequential容器封装的网络为例 用于手写识别数字图片识别
 ## 1- 搭建网络
@@ -97,11 +119,68 @@ network.build(input_shape = (None, 28*28))
 ## 2- 优化器 损失函数
 from tensorflow.keras import optimizers, losses
 ### 采用Adam优化器，学习率为0.01； 采用交叉熵损失函数，包含Softmax
-network.complie(
+network.compile(
     optimizer = optimizers.Adam(lr = 0.01),
     loss = losses.CategoricalCrossentropy(from_logits = True),
     metrics = ['accuracy'] # 测量指标为准确率
 )
 
+
 ## 8.2.2 模型训练
+
+"""
+epochs是指训练迭代的epochs数， validation_data是指用于验证的数据集
+和验证的评论 validation_freq 
+    每个 batch 中间隔几次 验证一次
+
+verbose
+0 = silent, 1 = progress bar, 2 = one line per epoch
+"""
+history = network.fit(train_db, epochs=5, validation_data = test_db
+                    ,validation_freq = 100, verbose=2)
+
+
+history.history
+
+## 8.2.3 模型测试
+x, y = next(iter(test_db))
+out = network.predict(x) # 模型预测
+print(out)
+## 如果只是简单地测试模型的性能， 可以通过Model.evaluate(db)即可循环完db数
+## 据集上所有的样本，并打印性能
+network.evaluate(test_db)
+
+
+
+# 8.3 模型保存与加载
+# ---------------------------------------------------
+## 8.3.1 张量方式
+"""
+
+网络的状态主要体现在网络的结构以及网络层的内部张量参数上，因此在 【拥有】
+【网络结构源】 文件的条件下，直接保存网络张量参数到文件上是最轻量级的一种方式。
+"""
+network.save_weights('weights.ckpt')
+print('saved weights.')
+
+network.load_weights('weights.ckpt') # 直接在已有的网络结构上加载
+print('loaded weights!')
+
+## 8.3.2 网络方式
+network.save('model.h5')
+print('saved total model.')
+
+network = tf.keras.models.load_model('model.h5') # 重构网络+导入参数
+
+## 8.3.3 SavedModel方式
+"""
+tf有强大的生态系统， 包括移动端和网页端的支持。当需要模型部署到其他平台时，采用tf
+剔除的SaveModel方式更具有平台无关性
+"""
+tf.keras.experimental.export_saved_model(network, 'model-savedmodel') # 载入在文件夹里面
+print('export saced model') 
+
+# 用户无需关心文件的保存格式，只需要通过 从文件恢复网络结构与网络参数
+network = tf.keras.experimental.load_from_saved_model('model-savedmodel')
+
 
