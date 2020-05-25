@@ -194,5 +194,23 @@ with summary_writer.as_default():
     # 可视化测试用的图片，设置最多可视化9张图片
     tf.summary.image('val-onebyone-images:', val_images, max_outputs=9, step=step)
 
-## 8.7.1 浏览器端
+
+
+## 8.7.2 浏览器端
+"""
+在运行程序时，通过运行tensorboard--logdir path 指定Web后端监控的文件目录path
+http://localhost:6006  即可监控网络训练进度
+
+TensorBoard还支持 tf.summary.histogram查看张量的数据直方图分布，以及通过tf.summary.text打印文本信息
+"""
+import tensorflow as tf
+with summary_write.as_default():
+    # 当前时间戳STEP上的数据为loss,写入到ID位 train-loss对象中
+    tf.summary.scaler('train-loss', float(loss), step=step)
+    # 可视化正式标签的直方图分布
+    tf.summary.histogram('y-hat',y , step=step)
+    # 查看文本信息
+    tf.summary.text('loss-text', str(float(loss)))
+    
+
 
