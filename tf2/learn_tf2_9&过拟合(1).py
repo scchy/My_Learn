@@ -14,6 +14,7 @@ import numpy as np
 #   - 9.3 数据集划分
 #   - 9.5 正则化
 #   - 9.6 Dropout
+#   - 9.7 数据增强
 # ========================
 
 # =======================================================================================================
@@ -97,5 +98,54 @@ loss_reg = tf.reduce_sum(tf.math.abs(w1)) + tf.reduce_sum(tf.math.abs(w2))
 #  𝜃𝑖中所有元素的平方和 Ridge Regularization
 loss_reg = tf.reduce_sum(tf.math.square(w1)) + tf.reduce_sum(tf.math.square(w2))
 
+
 # 9.6 Dropout
 # ---------------------------------------------------
+"""
+。Dropout 通过随机断
+开神经网络的连接，减少每次训练时实际参与计算的模型的参数量；但是在测试时，
+Dropout 会恢复所有的连接，保证模型测试时获得最好的性能。
+"""
+import tensorflow as tf
+x = tf.nn.dropout(x, rate=0.5)
+# model.add(layers.Dropout(rate=0.5)
+
+# 9.7 数据增强
+# ---------------------------------------------------
+"""
+增加数据集大小是解决过拟合最重要的途径。
+以图片数据为例，我们来介绍怎么做数据增强
+
+对于图中的人物图片，根据先验知识，我们知道旋
+转、缩放、平移、裁剪、改变视角、遮挡某局部区域都不会改变图片的类别标签，因此针
+对图片数据，我们可以有多种数据增强方式
+"""
+## tf.image 子模块
+def prepreocess(x, y):
+    # x: 图片的路径， y:图片的数字编码
+    x = tf.io.read_file(x)
+    x = tf.image.decode_jpeg(x, channels=3) # RGBA
+    # 图片缩放到 244*244 大小，这个大小根据网络设定自行调整
+    x = tf.image.resize(x, [244, 244])
+
+## 9.7.1 旋转
+### 图片选择180度
+    x = tf.image.rot90(x, k=2)
+## 9.7.2 翻转
+    x = tf.image.random_flip_left_right(x) # 水平
+    x = tf.image.random_flip_up_down(x)    # 上下
+## 9.7.3 裁剪
+    x = tf.image.rsize(x, [244, 244])
+    ## 再随机裁剪到合适尺寸
+    x = tf.image.random_crop(x, [244, 244, 3])
+## 9.7.4 生成数据
+"""
+通过生成模型在原有数据上学习到数据的分布， 从而生成新的样本，这种方式也可以在一定程度上提升网络的性能。
+如通过条件生成对抗网络（Conditional GAN)可以生成带标签的样本数据
+"""
+## 9.7.5 其他方式
+"""
+添加高斯噪声
+变换视角
+随机擦除
+"""
