@@ -14,6 +14,7 @@ import numpy as np
 #   - 10.2 卷积神经网络
 #   - 10.3 卷积层实现
 #    -- 10.3.2 卷积层类
+#   - 10.4 LeNet-5 实战(重要步骤)
 # ========================
 
 # =======================================================================================================
@@ -268,3 +269,88 @@ b = tf.zeros([4])
 out = out + b
 
 ## 10.3.2 卷积层类
+"""
+在tf, API的命名中，一般首字母大写的对象都是为类，
+小写的一般为函数
+"""
+import tensorflow as tf
+from tensorflow.keras import layers
+# 仅需指定卷积核数量参数filters，卷积核大小 kernel_size, 步长 填充就可以
+x = tf.random.normal([2, 5, 5, 3])
+layer = layers.Conv2D(4, kernel_size=3, strides=1, padding='SAME')
+layer = layers.Conv2D(4, kernel_size=(3 , 4), strides=(2, 1), padding='SAME')
+out = layer(x)
+out
+
+
+# 10.4 LeNet-5 实战
+# ---------------------------------------------------
+"""
+LeNet-5 是1998年提出，网络结构：
+in(32 * 32) --> 卷积(b 28, 28, 6) --> 下采样层(b, 14, 14, 6)
+--> 卷积(b, 10, 10, 16) --> 下采样层(b, 5, 5, 16)
+--> 展平(b, 400) --> dense 120 --> dense 84 --> 高斯层 10
+"""
+from tensorflow.keras import Sequential, layers
+networks = Sequential([
+    layers.Conv2D(6, kernel_size=3, strides=1, name='conv1_6_3X3'),
+    layers.MaxPooling2D(pool_size=2, strides=2, name='pooling1_half') ,
+    layers.ReLU(),
+
+    layers.Conv2D(16, kernel_size=3, strides=1, name='conv2_16_3X3'),
+    layers.MaxPooling2D(pool_size=2, strides=2, name='pooling2_half'),
+    layers.ReLU(),
+    layers.Flatten(name='flatten'),
+
+    layers.Dense(120, activation='relu', name='fc1_120'),
+    layers.Dense(84, activation='relu', name='fc2_84'),
+    layers.Dense(10, name='fc3_10_noactive'),
+])
+
+networks.build(input_shape=(4, 28, 28, 1))
+networks.summary()
+"""
+首先将数据集中shape为 [b, 28, 28]的输入增加一个维度，
+调整为[b, 28, 28, 1], 送入模型进行前向运算，得到输出张量output，shape为[b, 10]
+
+新建交叉熵损失函数，用于处理分类问题，设定
+from_logits=True 标志将softmax激活函数实现在损失函数中
+"""
+from tensorflow.keras import losses, optimizers
+criton = losses.CategoricalCrossEntropy(from_logits=True)
+# 构建梯度记录环境
+with tf.GradientTape() as tape:
+    # 插入通道数
+    x = tf.expand_dims(x , axis=3)
+    # 前向计算，获得10类
+    out = networks(x)
+    y_onehot = tf.one_hot(y, depth=10)
+    loss = criton(y_onehot, out)
+
+# 自动计算梯度
+grads = tape.grandient(loss, networks.trainable_variables)
+# 自动更新
+optimizer.apply_gradients(zip(grads, networks.trainable_variables))
+
+# 记录预测正确的数量，总样本数量
+correct, total = 0, 0
+for x, y in db_test:
+    # 扩充维度
+    x = tf.expand_dims(x, axis=3)
+    out =networks(x)
+    y_pred = tf.argmax(out, axis=1)
+    y = tf.cast(y, tf.int64)
+    correct += float(tf.reduce_sum(tf.cast(tf.equal(y_pred, y), dtype=tf.float32)))
+    # 总样本数
+    total += x.shape[0]
+
+print(f'test acc: {correct/total * 100:.2f}')
+"""
+在数据集上面训练30个epoch后， 网络准确率可以到达到98.1%，
+测试准确度也可以到到 97.7%
+"""
+
+
+
+
+
