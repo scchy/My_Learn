@@ -11,6 +11,7 @@
 # &3 估计
 # &4 估计进阶
 # &5 胜率
+#  -- 5.4 加数
 # ====================
 from scc_function.scc_bayes.scc_bayes import Pmf, Suite
 
@@ -521,11 +522,49 @@ o(A|D) = o(A)[ p(D|A) / p(D|B) ]
 
 
 
-
 # 5.3 奥粒弗的血迹
 # ------------------------------------------------
 """
+在一个犯罪现场， 有两人遗留了血迹。一名疑犯奥利弗经过测试发现是'O'型血。而发现
+的痕迹中血型分别是'O'型(一种本地人口的常见血型，有60%的概率)和'AB'型(一种罕见的血型，
+概率为1%)，那么这些数据是否支持奥利弗是疑犯之一？
 
+如果奥利弗是犯罪现场留下血迹的人之一，就解释了那个'O'血型证据样本的由来，因此数据的概率
+就是在人群中随意挑中一个‘AB’血型的概率 1%
 
+如果不是，则是随机抽取的组合 O-AB AB-O 2 * 0.6*0.01 = 1.2%.
+该情况的数据的似然度还要稍微高一些，所以血液证据并不能证明奥利弗的犯罪嫌疑。
+"""
+"""
+即，该数据由一个常见事件——'O'型血，和一个罕见事件——'AB'型血构成。如果奥利弗与常规事件相关
+，这使得罕见的事件还是无法解释。如果奥利弗与常规事件无关，那么我们有2中可能找到
+'AB'型血的疑犯。两种情况中的这一因素导致了差异
 """
 
+from scc_function.scc_bayes.scc_bayes import Pmf, Suite, SampleSum
+
+
+
+# 5.4 加数
+# ------------------------------------------------
+class Die(Pmf):
+    def __init__(self, sides):
+        Pmf.__init__(self)
+        for x in range(1, sides + 1):
+            self.Set(x, 1)
+        self.Normalize()
+
+# 创建6面的骰子
+d6 = Die(6)
+dice = [d6] * 3
+# 产生1000次转动3个骰子的样本
+# 随机选取对象 汇总，查看汇总的值出现的概率
+three = SampleSum(dice, 1000)
+three.name = 'sample'
+three.Print()
+
+
+import matplotlib.pyplot as plt
+v_lst = sorted(three.Items(), key=lambda pair:pair[0])
+plt.plot([i[0] for i in v_lst], [i[1] for i in v_lst])
+plt.show()
