@@ -65,7 +65,7 @@ class _DictWrapper():
         输入的是字典的时候
         param values: dict 
         """
-        for  k, v in values.iteritems():
+        for  k, v in values.items():
             self.Set(k, v)
     
     def InitPmf(self, values):
@@ -123,7 +123,7 @@ class _DictWrapper():
         if m is None:
             m = self.MaxLike()
         
-        for x, p in self.d.iteritems():
+        for x, p in self.d.items():
             if p:
                 self.Set(x, math.log(p /m))
             else:
@@ -137,7 +137,7 @@ class _DictWrapper():
         if m is None:
             m = self.MaxLike()
 
-        for x, p in self.d.iteritems():
+        for x, p in self.d.items():
             self.Set(x, math.exp(p - m))      
 
     def SetDict(self, d):
@@ -166,7 +166,7 @@ class _DictWrapper():
         return zip(*sorted(self.Items()))
 
     def Print(self):
-        for val, prob in sorted(self.d.iteritems()):
+        for val, prob in sorted(self.d.items()):
             print(val, prob)
     
     def Incr(self, x, term=1):
@@ -198,7 +198,11 @@ class _DictWrapper():
         取概率最大的值
         """
         return max(self.d.values())
-    
+
+    def GetDict(self):
+        """Gets the dictionary."""
+        return self.d
+
 
 class Pmf(_DictWrapper):
     """
@@ -607,7 +611,20 @@ class Hist(_DictWrapper):
 
     """
     def Freq(self, x):
+        return self.d.get(x, 0)
+    
+    def Freqs(self, xs):
+        return [self.Freq(x) for x in xs]
 
+    def IsSubset(self, other):
+        for val, freq in self.d.items():
+            if freq > other.Freq(val):
+                return False
+        return True
+
+    def Subtract(self, other):
+        for val, freq in other.d.items():
+            self.Incr(val, -freq) # 增加
 
 
 
@@ -644,3 +661,12 @@ def SampleSum(dists, n):
     """
     pmf = MakePmfFromList(RandomSum(dists) for i in range(n))
     return pmf
+
+def RandomSum(dists):
+    """
+    d_ 为pmf对象
+    """
+    # random.choice(list(self.d.keys()))
+    total = sum(d_.Random() for d_ in dists)
+    return total
+
