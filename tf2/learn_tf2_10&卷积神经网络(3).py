@@ -9,6 +9,8 @@ import numpy as np
 # ======== 目录 ==========
 # &10 卷积神经网络
 #   - 10.11 卷积层变种
+#       - 空洞卷积、转置卷积、分离卷积
+#   - 10.12 深度残差网络
 # ========================
 
 # =======================================================================================================
@@ -85,6 +87,96 @@ out
 # 普通卷积的输出作为转置卷积的输入， 进行转置卷积运算
 xx = tf.nn.conv2d_transpose(out, w, strides=2,
 padding='VALID', output_shape=[1, 5, 5,1])
+
+
+"""
+o+2p-k 不为s倍数
+o=(i+2*p-k)/s + 1
+当步长为s>1时，o向下取整
+"""
+x = tf.random.normal([1, 6, 6, 1])
+
+# 创建固定内容的卷积核矩阵
+w = tf.constant([[-1, 2, -3.], [4, -5, 6], [-7, 8, -9]])
+# 调整为合法维度的张量
+w = tf.expand_dims(w, axis=2)
+w = tf.expand_dims(w, axis=3)
+# 6*6的输入经过普通卷积核
+out = tf.nn.conv2d(x, w, strides=2, padding='VALID')
+out.shape 
+x = tf.random.normal([1, 6, 6, 1])
+
+"""
+a = (o+s*p-k)%s
+o=(i-1)*s + k - 2*p + a
+
+tf会自动推导需要填充的行列数a
+"""
+xx = tf.nn.conv2d_transpose(out, w, strides=2,
+padding='VALID',output_shape=[1, 6, 6, 1])
+xx
+
+## 矩阵角度
+## 转置卷积实现
+x = tf.reshape(tf.range(16)+1, [1, 4, 4, 1])
+x = tf.cast(x, dtype=tf.float32)
+### 创建3*3的卷积核
+w = tf.constant([[-1,2,-3],[4,-5,6], [-7, 8, -9]])
+w = tf.expand_dims(w, axis=2)
+w = tf.expand_dims(w, axis=3)
+w
+
+out = tf.nn.conv2d(x, w, strides=1, padding='VALID')
+xx = tf.nn.conv2d_transpose(out, w, strides=1, padding='VALID', output_shape=[1,4,4,1])
+
+tf.squeeze(xx)
+tf.squeeze(xx)
+
+# 创建转置卷积类
+layer_ = tf.keras.layers.Conv2DTranspose(
+    1, kernel_size=3, strides=1,padding='VALID'
+)
+xx2 = layer_(out)
+xx2
+
+"""
+padding=’VALID’
+o=(i-1)*s + k
+
+padding=SAME
+o=(i-1)*s + 1
+"""
+
+## 10.11.3 分离卷积
+"""
+普通卷积在对多通道输入进行运算时， 
+卷积核的每个通道与输入的每个通道分别进行卷积运算
+-->> 得到多通道的特征图
+-->> 在对应元素相加产生单个卷积核的最终输出。
+
+分离卷积:
+卷积核的每个通道与输入的每个通道分别进行卷积运算
+-->> 得到多通道的特征图
+-->> 进行多个1*1卷积核运算
+-->> 多个高宽不变的输出
+
+"""
+"""优势
+同样的输入和输出， 采用分离卷积的参数约是普通卷积的1/3
+
+普通卷积：3*3*3*4=108
+分离卷积：3*3*3*1+1*1*3*4 = 41
+
+
+分离卷积在Xception 和 MobileNets等对计算代价敏感的邻域中
+得到了大量应用。
+"""
+
+# 10.12 深度残差网络
+# -------------------------------------------------
+
+
+
 
 
 
