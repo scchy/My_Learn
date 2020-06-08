@@ -12,6 +12,7 @@
 # &4 估计进阶
 # &5 胜率
 #  -- 5.4 加数
+#  -- 5.5 最大值
 # ====================
 from scc_function.scc_bayes.scc_bayes import Pmf, Suite
 
@@ -568,3 +569,55 @@ import matplotlib.pyplot as plt
 v_lst = sorted(three.Items(), key=lambda pair:pair[0])
 plt.plot([i[0] for i in v_lst], [i[1] for i in v_lst])
 plt.show()
+
+
+# 5.5 最大化
+# ------------------------------------------------
+"""
+三种方法来计算一个最大值的分布
+模拟：
+    给定一个Pmf, 代表单一选择的分布，可以生成随机样本。找到最大值和模拟最大值的累积分布。
+
+枚举：
+    给定两个Pmf, 可以枚举所有可能的数值对， 并计算分布的最大值
+
+指数计算：
+    如果我们将一个Pmf转换成Cdf，有一个简单而有效的算法查找最大Cdf. 模拟最大值的代码与模拟求和的代码几乎相同
+
+Pmf.Max 与  cdf.Max实现是一样的
+
+cdf(5) 表示从分布中随机选取一个值小于等于5的概率
+
+从cdf1中取出x, 从cdf2中取出y， 计算做大值Z=max(x, y),则Z小于或等于5的可能性是多少
+如果x y 是独立分布的
+那个 cdf3(5) = cdf1(5)*cdf2(5)
+从一个分布中选择k次，
+cdfk(z)=cdf1(z)^k
+
+求最大值就是 每个累计概率的 k方
+
+"""
+
+from scc_function.scc_bayes.scc_bayes import Pmf, Suite, SampleSum
+six_tz = Pmf(dict(zip(range(1,7), [1]*6)))
+"""
+out_pmf = Pmf()
+for k1, v1 in self.Items():
+    for k_o, v_o in otherPmf.Items():
+        out_pmf.Incr(k1+k_o, v1*v_o)
+return out_pmf
+属性 __add__ 
+"""
+three_exact = six_tz +  six_tz + six_tz
+three_exact.name = 'exact'
+three_exact.Print()
+
+best_attr_cdf = three_exact.Max(6)
+best_attr_pmf = best_attr_cdf.MakePmf()
+
+
+import matplotlib.pyplot as plt
+v_lst = sorted(best_attr_pmf.Items(), key=lambda pair:pair[0])
+plt.plot([i[0] for i in v_lst], [i[1] for i in v_lst])
+plt.show()
+
