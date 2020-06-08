@@ -13,6 +13,7 @@
 # &5 胜率
 #  -- 5.4 加数
 #  -- 5.5 最大值
+#  -- 5.6 混合分布
 # ====================
 from scc_function.scc_bayes.scc_bayes import Pmf, Suite
 
@@ -621,3 +622,41 @@ v_lst = sorted(best_attr_pmf.Items(), key=lambda pair:pair[0])
 plt.plot([i[0] for i in v_lst], [i[1] for i in v_lst])
 plt.show()
 
+
+# 5.6 混合分布
+# ------------------------------------------------
+"""
+5个 4面骰子
+4个 6面骰子
+3个 8面骰子
+2个 12面骰子
+1个 20面骰子
+"""
+six_tz = Pmf(dict(zip(range(1,7), [1]*6)))
+eight_tz = Pmf(dict(zip(range(1,9), [1]*8)))
+
+mix = Pmf()
+for die in [six_tz, eight_tz]:
+    for o, prob in die.Items():
+        mix.Incr(o, prob)
+        print(mix.d)
+mix.Normalize()
+print(mix.d)
+
+# 于是解题
+# 组成混合分布
+mix = Pmf()
+# 用pmf.d为字典的性质 (根据书上来)
+for tz, tz_nm in zip([4, 6, 8, 12, 20], [2, 3, 2, 1, 1]):
+    pmf_tmp = Pmf(dict(zip(range(1,tz+1), [1]*tz)))
+    for o, prob in pmf_tmp.Items():
+        # print(o, tz_nm, prob)
+        mix.Incr(o, tz_nm * prob)
+    
+mix.Normalize()
+print(mix.d)
+
+import matplotlib.pyplot as plt
+v_lst = sorted(mix.Items(), key=lambda pair:pair[0])
+plt.bar([i[0] for i in v_lst], [i[1] for i in v_lst])
+plt.show()
