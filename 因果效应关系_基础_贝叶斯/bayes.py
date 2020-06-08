@@ -102,7 +102,6 @@ class _DictWrapper():
     def Scale(self, factor):
         """
         将值乘以一个系数
-
         """
         new = self.Copy()
         new.d.clear()
@@ -207,7 +206,6 @@ class _DictWrapper():
 class Pmf(_DictWrapper):
     """
     概率质量函数
-
     值可以是任何散列的类型；概率为浮点型
     Pmfs不一定要标准化
     """
@@ -515,6 +513,16 @@ class Cdf(object):
             old_P = new_p
         return total
 
+    def Max(self, k):
+        """
+        选择K个值， 的分布
+        """
+        cdf = self.Copy()
+        cdf.ps = [p**k for p in cdf.ps]
+        return cdf 
+
+
+
 # CDF还未结束
 # 
 # 
@@ -580,7 +588,6 @@ class Beta(object):
     def EvalPdf(self, steps=101, name=''):
         """
         返回： 概率质量函数
-
         """
         if self.alpha < 1 or self.beta < 1:
             cdf = self.MakeCdf()
@@ -607,8 +614,6 @@ class Beta(object):
 class Hist(_DictWrapper):
     """
     返回直方图，它是从值到频率的映射
-
-
     """
     def Freq(self, x):
         return self.d.get(x, 0)
@@ -656,7 +661,6 @@ def SampleSum(dists, n):
     """
     dists: list of Pmf / Cdf
     n: 样本次数
-
     return: new Pmf of sums
     """
     pmf = MakePmfFromList(RandomSum(dists) for i in range(n))
@@ -670,3 +674,33 @@ def RandomSum(dists):
     total = sum(d_.Random() for d_ in dists)
     return total
 
+
+# 最大值
+def RandomMax(dists):
+    total = max(dist.Random() for dist in dists)
+    return total 
+
+def SampleMax(dists, n ):
+    pmf = MakePmfFromList(RandomMax(dists) for i in range(n) )
+    return pmf
+
+def PmfMax(pmf1, pmf2):
+    res = Pmf()
+    for v1, p1 in pmf1.Items():
+        for v2, p2 in pmf2.Items():
+            res.Incr(max(v1, v2), p1*p2)
+    return res 
+
+
+def MakeMixture(pmf_lst, weight_lst,name='mix'):
+    """
+    由 pmf_lst 与 weight_lst 组成混合分布   
+    param pmf_lst: pmf类的 列表  
+    param weight_lst: pmf类的权重  
+    """
+    mix = Pmf(name=name)
+    for pmf_tmp, tz_nm in zip(pmf_lst, weight_lst):
+        for o, prob in pmf_tmp.Items():
+            mix.Incr(o, tz_nm * prob)
+    mix.Normalize()
+    return mix
