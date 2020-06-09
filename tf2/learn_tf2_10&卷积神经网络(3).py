@@ -11,6 +11,7 @@ import numpy as np
 #   - 10.11 卷积层变种
 #       - 空洞卷积、转置卷积、分离卷积
 #   - 10.12 深度残差网络
+#   - 10.13 DenseNet
 # ========================
 
 # =======================================================================================================
@@ -172,12 +173,71 @@ o=(i-1)*s + 1
 得到了大量应用。
 """
 
+
 # 10.12 深度残差网络
 # -------------------------------------------------
+"""
+网络的层数越深， 越可能获得更好的泛化能力。
+但是模型加深以后， 网络变得越来越难训练，这主要是由于梯度弥散现象造成的。
+
+一种很自然的想法是，既然浅层神经网络不容易出现梯度弥散现象，那么可以尝试给深层神经网络添加一种
+回退到浅层神经网络的机制。当深层神经网络可以轻松地回退到浅层神经网络时，深层神经网络可以获得与
+浅层神经网络相当的模型性能，而不至于更糟糕
+
+"""
+## 10.12.1 RestNet原理
+# ResNet 通过在卷积层的输入和输出之间添 Skip Connection 实现层数回退机制
+"""
+H(x) = F(x) + x
+
+一般需要x 与 F(x)的shape 完全一致， 所以一般都会进行 额外的卷积运算
+
+identity(x) 以1*1的卷积运算居多，主要用于调整输入的通道数
+
+"""
+## 10.12.2 RestBlock实现
+import tensorflow as tf
+from tensorflow.keras import layers, Sequential
+
+class BasicBlock(layers.Layer):
+    """
+    残差模块类
+    """
+    def __init__(self, filter_num, stride=1):
+        super(BasicBlock, self).__init__()
+        # f(x)包含2个普通卷积层， 创建卷积层1
+        self.conv1 = layers.Conv2D(filter_num, kernel_size=(3,3), strides=stride, paddig='same')
+        self.bn1 = layers.BatchNormalization()
+        self.relu = layers.Activation('relu')
+        # 创建第二卷积层
+        self.conv2 = layers.Conv2D(filter_num, kernel_size=(3,3), strides=stride, paddig='same')
+        self.bn2 = layers.BatchNormalization()   
+
+        if stride != 1: # 插入identity层 用于实现 x 与 f(x) shape 一致
+            self.downsample = Sequential()
+            self.downsample.add(layers.Conv2D, kernel_size=(1,1),  strides=stride)
+        else: # 否则直接连接
+            self.downsample = lambda x:x 
+        
+    def call(self, inputs, training=None):
+        # 前向传播
+        out = self.conv1(inputs)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        # 输入通过identity()转换
+        identity = self.downsample(inputs)
+        # f(x) + x
+        output = layers.add([out, identity])
+        output = tf.nn.relu(output)
+        return  output
 
 
 
-
+# 10.13 DenseNet
+# -------------------------------------------------
 
 
 
