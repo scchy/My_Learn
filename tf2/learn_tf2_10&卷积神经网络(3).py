@@ -237,12 +237,17 @@ class BasicBlock(layers.Layer):
 
 
 # 10.13 DenseNet
-# -------------------------------------------------
+#---------------------------------------------
+"""
+2016年提出， DenseNet将前面所有层的特征图信息通过kip Connection与当前层输出进行聚合，与ResNet
+的对应位置相加不同。 DenseNet采用在通道轴c维度进行拼接操作，聚合特征信息。
 
 
-
-
-
-
+x0 -- Conv——H1 --> x1 
+--> tf.concat([x0, x1], axis=c) --Conv_H2 --> x2
+--> tf.concat([x0, x1, x2], axis=c) --Conv_H3 --> x3
+--> tf.concat([x0, x1, x2, x3], axis=c) --Conv_H4 --> x4
+如此构成denseblock
+"""
 
 
