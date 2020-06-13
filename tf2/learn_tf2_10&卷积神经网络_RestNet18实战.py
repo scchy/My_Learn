@@ -24,7 +24,7 @@ class ResBlock(layers.Layer):
         # Conv1
         self.conv1 = layers.Conv2D(filternum, kernel_size=3, strides=strides, padding='same', name='resblock_conv1')
         self.bn1 = layers.BatchNormalization()
-        self.relu = layers.ReLU()
+        self.relu = layers.Activation('relu')
         # Conv2 strides=1 是确定的 
         self.conv2 = layers.Conv2D(filternum, kernel_size=3, strides=1, padding='same', name='resblock_conv2')
         self.bn2 = layers.BatchNormalization()
@@ -35,7 +35,7 @@ class ResBlock(layers.Layer):
         else:
             self.jump = lambda x:x
         
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=True):
         #[b h w c]
         # Conv1
         out = self.conv1(inputs)
@@ -47,7 +47,8 @@ class ResBlock(layers.Layer):
         # jump
         identity = self.jump(inputs)
         output = layers.add([out, identity])
-        return tf.nn.relu(output)
+        output = tf.nn.relu(output)
+        return output
 
 
 
@@ -66,8 +67,9 @@ class RestNet(Model):
         # 堆叠4个 Restblock # sum(2*layers_dims)
         self.layer1 = self.build_resblock(64, layers_dims[0])
         self.layer2 = self.build_resblock(128, layers_dims[1], strides=2)
-        self.layer3 = self.build_resblock(256, layers_dims[2], strides=2)
-        self.layer4 = self.build_resblock(512, layers_dims[3], strides=2)
+        # 电脑内存问题 改为2个
+        # self.layer3 = self.build_resblock(256, layers_dims[2], strides=2)
+        # self.layer4 = self.build_resblock(512, layers_dims[3], strides=2)
         # 通过Pooling层将高宽降低为1*1
         self.avgpool = layers.GlobalAveragePooling2D()
         # 最后一个全连接层
@@ -77,8 +79,8 @@ class RestNet(Model):
         x = self.stem(inputs)
         x = self.layer1(x)
         x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        # x = self.layer3(x)
+        # x = self.layer4(x)
         x = self.avgpool(x)
         x = self.fc(x)
         return x
@@ -88,14 +90,15 @@ class RestNet(Model):
         res_block = Sequential()
         # 只有第一个restblocak步长可能不是1， 进行下采样
         res_block.add(ResBlock(filter_num, strides=strides))
-        for _ in range(blocks):
+        for _ in range(1, blocks):
             res_block.add(ResBlock(filter_num, strides=1))
         
         return res_block
 
 
-def restnet18():
-    return RestNet([2, 2, 2, 2])
+def restnet18(num_classes):
+    return RestNet([2, 2], num_classes)
+
 
 
 # 一、 数据加载 
@@ -108,7 +111,7 @@ def cifarpreprocess(x, y):
     预处理
     """
     x = 2 * tf.cast(x, dtype=tf.float32)/255.0 - 1
-    y_onhot = tf.one_hot(y, depth=10)
+    y_onhot = tf.one_hot(tf.cast(y, dtype=tf.int32), depth=10)
     return x, tf.cast(y_onhot, dtype=tf.float32)
 
 
@@ -130,11 +133,12 @@ def corecct(y, y_pred):
 
 
 
-tr_db = cifarget_db(x_tr, y_tr, batch_=512, tr_flg=True)
-te_db = cifarget_db(x_te, y_te, batch_=512)
+tr_db = cifarget_db(x_tr, y_tr, batch_=200, tr_flg=True)
+te_db = cifarget_db(x_te, y_te, batch_=200)
 
-model = restnet18()
-model.build(input_shape=(None, 32, 32, 3))
+model = restnet18(num_classes=10)
+model.build(input_shape=(None,32,32,3))
+model.summary()
 optim_ = optimizers.Adam(lr=1e-4)
 
 dir(optimizers)
@@ -144,11 +148,14 @@ dir(optimizers)
 # acc_lst_te = []
 # loss_te = []
 
+
 for epoch in range(50):
     for step, (x, y) in enumerate(tr_db):
         with tf.GradientTape() as tape:
             out = model(x)
-            loss = losses.CategoricalCrossEntropy(y, out, from_logits=True)
+            # 计算交叉熵
+            loss = tf.losses.categorical_crossentropy(y, out, from_logits=True)
+            loss = tf.reduce_mean(loss)
 
         grads = tape.gradient(loss, model.trainable_variables)
         silence_ = optim_.apply_gradients(zip(grads, model.trainable_variables))
@@ -156,7 +163,7 @@ for epoch in range(50):
         if step % 100 == 0:
             c = corecct(y, out)
             acc_ = c / x.shape[0]
-            print(f'[ {epoch}  {step} ] loss_tr:{loss:.5f}   acc_tr: {acc_.numpy()*100:.2f}')
+            print(f'[ {epoch}  {step} ] loss_tr:{loss:.5f}   acc_tr: {acc_.numpy()*100:.2f}%')
 
 
     print('开始测试....')
@@ -168,6 +175,6 @@ for epoch in range(50):
         c_total += corecct(y, out)
         n += xt.shape[0]
     accte = c_total/n
-    print(f'[ {epoch} ] acc_te: {accte.numpy()*100:.2f}')
+    print(f'[ {epoch} ] acc_te: {accte.numpy()*100:.2f}%')
 
 
