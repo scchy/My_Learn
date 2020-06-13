@@ -148,7 +148,6 @@ dir(optimizers)
 # acc_lst_te = []
 # loss_te = []
 
-
 for epoch in range(50):
     for step, (x, y) in enumerate(tr_db):
         with tf.GradientTape() as tape:
@@ -171,10 +170,10 @@ for epoch in range(50):
     n = 0
     for xt, yt in tr_db:
         yt_p = model(xt)
-        loss_total += losses.CategoricalCrossEntropy(yt, yt_p, from_logits=True)
+        losst = tf.losses.categorical_crossentropy(y, out, from_logits=True)
+        loss_total += tf.reduce_mean(losst)
         c_total += corecct(y, out)
         n += xt.shape[0]
     accte = c_total/n
     print(f'[ {epoch} ] acc_te: {accte.numpy()*100:.2f}%')
-
 
