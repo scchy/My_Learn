@@ -30,3 +30,4 @@ T = np.c_[e1, e2]
 np.dot(array_, T)
 """
 np.dot(array_, U)
+
