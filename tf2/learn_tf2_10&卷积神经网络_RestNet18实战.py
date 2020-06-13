@@ -1,5 +1,5 @@
 # python3.6
-# Create date: 2020-06-05
+# Create date: 2020-06-13
 # Function: 19年11月最新-《TensorFlow+2.0深度学习算法实战教材》
 
 import tensorflow as tf 
