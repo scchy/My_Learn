@@ -164,8 +164,66 @@ for  xt in tf.unstack(x, axis=1):
 
 out
 
-# 11.4.2 多层SimpleRNNCell网络
 
+# 11.4.2 多层SimpleRNNCell网络
+"""
+循环神经网络虽然在时间轴上展开多次，但只能算一个网络层。
+循环神经网络层数一般控制在十层以内
+"""
+import tensorflow as tf 
+from tensorflow.keras import layers
+x = tf.random.normal([4, 80, 100])
+xt = x[:, 0, :] # 收取第一个时间戳的输入x0
+# 构建2个cell, 先cell0 后cell
+cell0 = layers.SimpleRNNCell(64)
+cell1 = layers.SimpleRNNCell(64)
+h0 = [tf.zeros([4, 64])] # cell0 的初始状态向量
+h1 = [tf.zeros([4, 64])] # cell1 的初始状态向量
+for xt in tf.unstack(x, axis=1):
+    # xtw作为输入， 输入out0
+    out0, h0 = cell0(xt, h0)
+    # 上一个cell输出的out0 作为本cell的输入
+    out1, h1 = cell1(out0, h1)
+
+# 也可
+# 保存上一层的所有时间戳上面的输出
+middle_sequences = []
+for xt in tf.unstack(x, axis=1):
+    # xtw作为输入， 输入out0
+    out0, h0 = cell0(xt, h0)
+    middle_sequences.append(out0)
+
+# 计算第二层的时间戳上的输出
+# 如果不是末层，需要保存所有时间戳上面的输出
+for xt in middle_sequences:
+    # 上一个cell输出的out0 作为本cell的输入
+    out1, h1 = cell1(xt, h1)
+"""
+一般来说， 最末层Cell的状态有可能保存了高层特征，因此一般使用最末层的输出作为后续任务网络的
+输入。 更特别的，每层最后一个时间戳上的状态输出包含了整个序列的全局信息，如果只希望选用一个状态变量
+来完成后续任务， 比如情感分类， 一般选用最末层、最末时间戳的状态输出.
+"""
+
+# 11.4.3 SimpleRNN层
+layer1 = layers.SimpleRNN(64)
+x = tf.random.normal([4, 80, 100])
+out = layer1(x)
+out.shape
+
+layer1 = layers.SimpleRNN(64, return_sequences=True)
+out = layer1(x)
+out 
+
+# 两层的网络
+"""
+每层都需要上一层在每个时间戳上面的状态输出，因此除了最末层以外
+所有的RNN层都需要返回每个时间戳上面的状态输出， 设置 return_sequences=True
+"""
+net = Sequential([
+    layers.SimpleRNN(64, return_sequences=True),
+    layers.SimpleRNN(64)
+])
+out = net(x)
 
 
 
