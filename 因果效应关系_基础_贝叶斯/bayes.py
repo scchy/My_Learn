@@ -3,6 +3,7 @@
 # author: Scc_hy 
 # create date: 2020-04-18
 # Function： 贝叶斯常用的类
+# update day: 2020-06-17 
 import copy
 import math
 import random 
@@ -704,3 +705,80 @@ def MakeMixture(pmf_lst, weight_lst,name='mix'):
             mix.Incr(o, tz_nm * prob)
     mix.Normalize()
     return mix
+
+
+
+class Pdf(object):
+    """
+    概率密度函数
+    """
+    def Density(self, x):
+        """
+        需要自己提供，必须通过子类来提供。
+        取一个x值，并返回相应的密度。
+        """
+        raise UnimplementedMethodException()
+
+    def MakPmf(slef, xs, name=''):
+        """
+
+        """
+        pmf = Pmf(name=name)
+        for x in xs:
+            pmf.Set(x, self.Density(x))
+        pmf.Normalize()
+        return pmf
+    
+
+import scipy.stats as sts
+class GaussianPdf(Pdf):
+    """
+    高斯密度分布
+    """
+    def __init__(self, mu, std):
+        """
+        mu:    mean 均值   
+        std: standard deviation 标准差  
+        """
+        self.mu = mu
+        self.std = std
+    
+    def Density(self, x):
+        return sts.norm.pdf(x, self.mu, self.std)
+
+
+def MakePmfFromItems(t, name=''):
+    """Makes a PMF from a sequence of value-probability pairs
+
+    Args:
+        t: sequence of value-probability pairs
+        name: string name for this PMF
+
+    Returns:
+        Pmf object
+    """
+    pmf = Pmf(dict(t), name)
+    pmf.Normalize()
+    return pmf
+
+
+class EstimatedPdf(Pdf):
+    """
+    返回pdf评估的KDE(内核密度估计)
+    从样本找到一个恰当平滑的PDF进行数据拟合
+    """
+    def __init__(self, sample):
+        self.kde = sts.gaussian_kde(sample)
+
+    def Density(self, x):
+        """
+        probability density
+        """
+        return self.kde.evaluate(x)
+
+    def MakePmf(self, xs, name=''):
+        ps = self.kde.evaluate(xs)
+        pmf = MakePmfFromItems(zip(xs, ps), name=name)
+        return pmf
+
+    
