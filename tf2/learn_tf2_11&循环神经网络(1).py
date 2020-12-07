@@ -71,6 +71,10 @@ Embedding层的查询表是随机初始化的，需要从空开始训练。实�
 # 从预训练模型中加载词向量表
 embed_glove = load_embed('glovr.6B.59d.txt')
 # 直接利用预训练的词向量初始化Embedding层
+net.set_wights([embed_glove])
+net.trainable = False
+# 如果希望学到区别于预训练词向量模型不同的表示方法，那么可以把Embedding层包含进反向传播算法中去
+# 利用梯度下降来微调(Fine-tuning)单词表示方法
 
 
 # 11.2 循环神经网络
@@ -98,6 +102,9 @@ I hate this boring movie.
 """
 ## 11.2.3 语义信息
 """
+如何让网络能够按序提取词向量的语义信息，并累积成整个句子的语境信息呢？ 
+- Memory 机制。 如果网络能够提供一个单独的memory变量，每次提取词向量的特征并刷新memory,直到最后一个输入完成，
+此时的memory即存储了序列的语义特征，并且由于输入之间的先后顺序，使得memory内容与序列顺序紧密关联。
 状态张量h，
 ht = sigma(Wxh*xt + Whh * h(t-1) + b)
 h0 初始化为0
