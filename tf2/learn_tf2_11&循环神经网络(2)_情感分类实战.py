@@ -2,6 +2,8 @@
 # python3.6
 # Create date: 2020-06-17
 # Function: 19年11月最新-《TensorFlow+2.0深度学习算法实战教材》
+# revise data: 2020-12-09
+#         tip: 重新开始刷NLP相关
 
 import tensorflow as tf 
 import math
