@@ -23,19 +23,22 @@
 
 """
 def show_desc(scale=1):
-  W = tf.one([2,2]) * scale
-  eigenvalyes = tf.linalg.eigh(W)[0] # 计算特征值
+    W = tf.ones([2,2]) * scale
+    eigevalues = tf.linalg.eigh(W)[0] # 计算特征值
 
-  val = [W]
-  for i in range(10):
-    val.append([val[-1]@W])
+    val = [W]
+    for i in range(10):
+        val.append([val[-1]@W])
 
-  # 计算L2范数
-  norm = list(
-    map(lambda x:tf.norm(x).numpy(), val)
-  )
-  plt.plot(range(1,12), norm)
-  plt.show()
+    # 计算L2范数
+    norm = list(
+        map(lambda x:tf.norm(x).numpy(), val)
+    )
+    plt.plot(range(1,12), norm)
+    plt.show()
+  
+show_desc()
+show_desc(0.3)
   
 ## 11.6.1 梯度裁剪
  
