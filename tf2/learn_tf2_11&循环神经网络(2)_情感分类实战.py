@@ -65,6 +65,13 @@ def decode_review(text):
     return ' '.join([reverse_word_index.get(i,'?') for i in text])
 
 decode_review(x_te[0])
+# 对于长度参差不齐的句子，认为设置一个阈值，对于大于此长度的句子，选择阶段部分单词，可以选择截去句首单词，也可以截去
+# 句末单词：对于小于此长度的句子，可以选择在句首或句尾填充，句子截断功能可以通过keras.preprocessing.sequence.pad_sequences()
+# 函数方便实现：
+x_train = keras.preprocessing.sequence.pad_sequences(x_train, maxlen=max_review_len)
+x_test = keras.preprocessing.sequence.pad_sequences(x_test, maxlen=max_review_len)
+
+
 
 # 构建数据集
 def get_db_imdb(x, y, batch_=128):
@@ -86,6 +93,7 @@ class MyRNN(tf.keras.Model):
     # Cell方式构建多层网络
     def __init__(self, batchsz, units):
         super(MyRNN, self).__init__()
+        # [b, 64] 构建Cell初始化状态向量，重复使用
         self.state0 = [tf.zeros([batchsz, units])]
         self.state0 = [tf.zeros([batchsz, units])]
         # 词向量编码 [b 80] -> [b 80 100]
@@ -116,4 +124,16 @@ class MyRNN(tf.keras.Model):
     
 
 ## 11.5.3 训练与测试
-
+def main():
+    units = 64 # RNN状态向量长度f
+    epochs = 20
+    model = MyRNN(units)
+    # 编译
+    model.compile(
+        optimizer = optimizers.Adam(0.001),
+        loss = losses.BinaryCrossentropy(),
+        metrics = ['accuracy']
+    )
+    model.fit(db_train, epochs = epochs, validation_data = db_test)
+    model.evaluate(db_test)
+    
