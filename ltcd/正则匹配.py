@@ -8,20 +8,30 @@
 def isMatch(s, p):
     if(p == ''):
         return s == '';
-    if s == '':
-        return False
-    print(f's={s[0]} p={p[0]}')
-    first_match = s[0] and ((s[0] == p[0]) or (p[0] == '.'))  if s else False
-    print(f'first_match={first_match}')
+
+    fst = False
+    if s != '':
+        fst = s[0] and ((s[0] == p[0]) or (p[0] == '.'))
+
+    print(f's={s} p={p} fst={fst}')
     if(len(p) >= 2 and p[1] == '*'):
-        return isMatch(s, p[2:]) or (first_match and isMatch(s[1:], p))
+        if len(s):
+            return isMatch(s, p[2:]) or (fst and isMatch(s[1:], p))
+        else:
+            return isMatch(s, p[2:]) or (fst and isMatch("", p))
+    return fst and isMatch(s[1:], p[1:])
 
-    return first_match and isMatch(s[1:], p[1:])
 
+if __name__ == '__main__':
+    str_ = "ab";
+    pattern = ".*c*";
+    result = isMatch(str_, pattern)
+    print(f"result={result}")
 
-str_ = "ab";
-pattern = ".*c*";
-isMatch(str_, pattern)
+    str_ = "ab";
+    pattern = ".*c";
+    result = isMatch(str_, pattern)
+    print(f"result={result}")
 
 
 
