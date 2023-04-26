@@ -1,0 +1,32 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "C/C++: g++ 生成活动文件",
+			"command": "/usr/bin/g++",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-g", // 调试信息
+				"-Wall", // 开启所有告警
+				"-std=c++14", // c++14标准
+				"${file}",
+				// "${fileDirname}/*.cpp", // 文件所在的文件夹路径下所有cpp文件
+				"-o",
+				"${workspaceFolder}/release/${fileBasenameNoExtension}" // 文件所在的文件夹路径/
+				// "${fileDirname}/${fileBasenameNoExtension}"
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group":  {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "编译器: /usr/bin/g++"
+		}
+	]
+}
