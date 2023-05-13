@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+include("${CMAKE_CURRENT_LIST_DIR}/dlibTarget.cmake")
+check_required_components("@TARGET_NAME@")
+
+get_target_property(@TARGET_NAME@_INCLUDE_DIR @TARGET_NAME@ INTERFACE_INCLUDE_DIRECTORIES)
+set(@TARGET_NAME@_LIBRARIES @TARGET_NAME@)
+set(@TARGET_NAME@_AUTHOR SCC)
