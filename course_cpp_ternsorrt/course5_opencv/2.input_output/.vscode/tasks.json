@@ -2,22 +2,20 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "type": "cppbuild",
+            "type": "shell",
             "label": "CMake: 配置",
-            "command": "cmake",
-            "args": [
-                "-DCMAKE_BUILD_TYPE=Debug",
-                "-S .",
-                "-B build"
-            ],
-            "problemMatcher": "$msCompile",
-            "group": "build",
+            "command": "cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug",
+            "problemMatcher": "$gcc",
+            "group": {
+                "kind":"build",
+                "isDefault": true
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             }
         },
         {
-            "type": "cppbuild",
+            "type": "shell",
             "label": "CMake: 构建",
             "command": "cmake",
             "args": [
@@ -25,7 +23,10 @@
                 "build"
             ],
             "problemMatcher": "$msCompile",
-            "group": "build",
+            "group": {
+                "kind":"build",
+                "isDefault": true
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -38,11 +39,14 @@
             "label": "删除build目录",
             "command": "rm",
             "args": [
-                "--fr",
+                "-fr",
                 "build"
             ],
             "problemMatcher": "$msCompile",
-            "group": "build",
+            "group": {
+                "kind":"build",
+                "isDefault": true
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             }
@@ -52,7 +56,10 @@
             "label": "运行可执行文件",
             "command": "./build/demo_${fileBasenameNoExtension}",
             "problemMatcher": "$msCompile",
-            "group": "build",
+            "group": {
+                "kind":"build",
+                "isDefault": true
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             },

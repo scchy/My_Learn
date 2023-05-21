@@ -5,15 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
+            "name": "c++ CMake Debug",
             "type": "lldb", // C++调试
             "request": "launch",
             "program": "${workspaceFolder}/build/demo_${fileBasenameNoExtension}",  // 文件所在的文件夹路径/release/当前文件的文件名，不带后缀
             "args": [],
-            "stopAtEntry": false,
-            "cwd": "${fileDirname}", // 文件所在的文件夹路径
-            "preLaunchTask": "CMake: 构建",
-            "environment": []
+            "cwd": "${workspaceFolder}", // 文件所在的文件夹路径
+            "preLaunchTask": "CMake: 构建"
         },
         {
             "name": "(gdb) 启动",
