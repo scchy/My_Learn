@@ -1,0 +1,7 @@
+protocols: [tcp]
+
+paths:
+  live1.sdp:
+  live2.sdp:
+  live3.sdp:
+  live4.sdp:

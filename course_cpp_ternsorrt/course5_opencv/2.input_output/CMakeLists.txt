@@ -22,5 +22,5 @@ link_libraries(${OpenCV_LIBS} ${gflags_LIBRARIES})
 # 添加可执行文件
 add_executable(demo_1.img src/1.img.cpp)
 add_executable(demo_2.video src/2.video.cpp)
-add_executable(demo_3.camera src/3.camera.cpp)
+add_executable(demo_3.cemera src/3.cemera.cpp)
 

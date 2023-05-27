@@ -2,12 +2,13 @@
 #include <iostream>
 #include <gflags/gflags.h>
 
-DEFINE_int32(camera, 4, "Input camera"); // 摄像头编号
+DEFINE_int32(camera, 0, "Input camera"); // 摄像头编号
 
 int main(int argc, char **argv){
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     // 读取视频： 创建一个videoCapture对象，参数为摄像头编码
     cv::VideoCapture capture(FLAGS_camera);
+    
     // 设置指定摄像头的分辨率
     int width = 640;
     int height = 480;

@@ -22,15 +22,15 @@ int main(int argc, char **argv){
         }
         // 转成灰度图
         cv::cvtColor(frame, gray_frame, cv::COLOR_BGR2GRAY);
-        // // 显示视频帧
-        // cv::imshow("raw frame:", frame);
-        // cv::imshow("gray frame:", gray_frame);
-        // int k = cv::waitKey(30);
-        // // 按下esc建退出
-        // if(k == 27){
-        //     std::cout << "退出" << std::endl;
-        //     break;
-        // }
+        // 显示视频帧
+        cv::imshow("raw frame:", frame);
+        cv::imshow("gray frame:", gray_frame);
+        int k = cv::waitKey(30);
+        // 按下esc建退出
+        if(k == 27){
+            std::cout << "退出" << std::endl;
+            break;
+        }
 
     }
     return 0;
