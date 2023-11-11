@@ -100,4 +100,3 @@ python export.py --weights weights/yolov5s.pt --include onnx --simplify --dynami
 ## 2.3 code detail
 
 `export.patch`
-

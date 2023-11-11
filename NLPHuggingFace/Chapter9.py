@@ -1,6 +1,7 @@
 # python3
 # Create date: 2023-10-07
 # Author: Scc_hy
+# Chapter: 9- Dealing With Few to No Labels
 # ====================================================================================
 
 __doc__ = """
@@ -31,7 +32,13 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import classification_report
 from skmultilearn.problem_transform import BinaryRelevance
 from sklearn.feature_extraction.text import CountVectorizer
-
+from transformers import AutoTokenizer, AutoModel, AutoConfig, AutoModelForSequenceClassification
+from transformers import Trainer, TrainingArguments
+from transformers import (
+    DataCollatorForLanguageModeling, set_seed, AutoModelForMaskedLM
+)
+import torch
+from scipy.special import expit as sigmoid
 
 # 1st、 Preparing the Data
 # -----------------------------------------------------------------
@@ -214,6 +221,8 @@ plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
 # Working with No Labeled Data
 # ****************************
 from transformers import pipeline
+import os
+os.environ['CURL_CA_BUNDLE'] = ''
 
 pipe = pipeline('fill-mask', model='bert-base-uncased')
 movie_desc = "The main characters of the movie madacasar are a lion, a zebra, a giraffa, and a hippo. "
@@ -417,4 +426,350 @@ plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes + Aug")
 
 ## Using Embeddings as a Lookup Table
 # ------------------------------------------
+model_ckpt = 'miguelvictor/python-gpt2-large'
+tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
+model = AutoModel.from_pretrained(model_ckpt)
+
+
+def mean_pooling(model_output, attention_mask):
+    token_embedding = model_output[0]
+    input_mask_expanded = (
+        attention_mask
+        .unsqueeze(-1)
+        .expand(token_embedding.size())
+        .float()
+    )
+    sum_embedding = torch.sum(token_embedding * input_mask_expanded, 1)
+    sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    return sum_embedding / sum_mask
+
+
+def embed_text(examples):
+    ipts = tokenizer(examples['text'], padding=True, truncation=True, max_length=128, return_tensors='pt')
+    with torch.no_grad():
+        model_output = model(**ipts)
+    
+    pooled_embeds = mean_pooling(model_output, ipts['attention_mask'])
+    return {'embedding': pooled_embeds.cpu().numpy()}
+
+
+tokenizer.pad_token = tokenizer.eos_token
+embs_train = ds["train"].map(embed_text, batched=True, batch_size=16)
+embs_valid = ds["valid"].map(embed_text, batched=True, batch_size=16)
+embs_test = ds["test"].map(embed_text, batched=True, batch_size=16)
+# you can think of this as a search engine for embeddings,
+embs_train.add_faiss_index("embedding")
+
+
+i, k = 0, 3 # Select the first query and 3 nearest neighbors
+rn, nl = "\r\n\r\n", "\n"
+
+query = np.array(embs_valid[i]['embedding'], dtype=np.float32)
+scores, samples = embs_train.get_nearest_examples('embedding', query, k=k)
+print(f"QUERY LABELS: {embs_valid[i]['labels']}")
+print(f"QUERY TEXT:\n{embs_valid[i]['text'][:200].replace(rn, nl)} [...]\n")
+print("="*50)
+print(f"Retrieved documents:")
+for score, label, text in zip(scores, samples["labels"], samples["text"]):
+    print("="*50)
+    print(f"TEXT:\n{text[:200].replace(rn, nl)} [...]")
+    print(f"SCORE: {score:.2f}")
+    print(f"LABELS: {label}")
+
+
+def get_sample_preds(sample, m):
+    """
+    decide to use the labels with appeared m times 
+    """
+    return (np.sum(sample['label_ids'], axis=0) >= m).astype(int)
+
+
+def find_best_k_m(ds_train, valuid_queries, valid_labels, max_k=17):
+    max_k = min(len(ds_train), max_k)
+    perf_micro = np.zeros((max_k, max_k))
+    perf_macro = np.zeros((max_k, max_k))
+    for k in range(1, max_k):
+        # try severel times
+        for m in range(1, k+1):
+            _, samples = ds_train.get_nearest_examples_batch(
+                'embedding',
+                valuid_queries,
+                k=k
+            )
+            y_pred = [get_sample_preds(s, m) for s in samples]
+            clf_report = classification_report(
+                valid_labels,
+                y_pred,
+                target_names=mlb.classes_,
+                zero_division=0,
+                output_dict=True
+            )
+            perf_micro[k, m] = clf_report['micro_avg']['f1-score']
+            perf_macro[k, m] = clf_report['marco_avg']['f1-score']
+    return perf_micro, perf_macro
+
+
+valid_labels = np.array(embs_valid["label_ids"])
+valid_queries = np.array(embs_valid["embedding"], dtype=np.float32)
+perf_micro, perf_macro = find_best_k_m(embs_train, valid_queries, valid_labels)
+
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 3.5), sharey=True)
+ax0.imshow(perf_micro)
+ax1.imshow(perf_macro)
+ax0.set_title("micro scores")
+ax0.set_ylabel("k")
+ax1.set_title("macro scores")
+for ax in [ax0, ax1]:
+    ax.set_xlim([0.5, 17 - 0.5])
+    ax.set_ylim([17 - 0.5, 0.5])
+    ax.set_xlabel("m")
+plt.show()
+
+k, m = np.unravel_index(perf_micro.argmax(), perf_micro.shape)
+print(f'Best k: {k}, best m: {m}')
+
+# use k=15, m=5
+embs_train.drop_index("embedding")
+test_labels = np.array(embs_test["label_ids"])
+test_queries = np.array(embs_test["embedding"], dtype=np.float32)
+for train_slice in train_slices:
+    # Create a Faiss index from training slice
+    embs_train_tmp = embs_train.select(train_slice)
+    embs_train_tmp.add_faiss_index("embedding")
+    # Get best k, m values with validation set
+    perf_micro, _ = find_best_k_m(embs_train_tmp, valid_queries, valid_labels)
+    k, m = np.unravel_index(perf_micro.argmax(), perf_micro.shape)
+    # Get predictions on test set
+    _, samples = embs_train_tmp.get_nearest_examples_batch(
+        "embedding",
+        test_queries,
+        k=int(k) # 15
+    )
+    # m = 5
+    y_pred = np.array([get_sample_preds(s, m) for s in samples])
+    clf_report = classification_report(
+        test_labels, 
+        y_pred,
+        target_names=mlb.classes_, 
+        zero_division=0, 
+        output_dict=True
+    )
+    macro_scores["Embedding"].append(clf_report["macro avg"]["f1-score"])
+    micro_scores["Embedding"].append(clf_report["micro avg"]["f1-score"])
+
+plot_metrics(micro_scores, macro_scores, train_samples, "Embedding")
+
+## Fine-Tuning a Vanilla Transformer
+# ------------------------------------------
+model_ckpt = 'bert-base-uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
+
+
+def tokenize(batch):
+    return tokenize(batch['text'], truncation=True, max_length=128)
+
+
+ds_enc = ds.map(tokenize, batched=True)
+ds_enc = ds_enc.remove_columns(['labels', 'text'])
+ds_enc.set_format('torch')
+ds_enc = ds_enc.map(lambda x: {'label_ids_f': x['label_ids'].to(torch.float)}, remove_columns=['label_ids'])
+ds_enc.rename_column('label_ids_f', 'label_ids')
+
+training_args_fine_tune = TrainingArguments(
+    output_dir='/home/scc/sccWork/localModels/chapter9_fine_tune_model',
+    num_train_epochs=20,
+    learning_rate=3e-5,
+    lr_scheduler_type='constant',
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=32,
+    weight_decay=0.0,
+    evaluation_strategy='epoch',
+    save_strategy='epoch',
+    logging_strategy='epoch',
+    load_best_model_at_emd=True,
+    metric_for_best_model='micro f1', # We need the F1-score to choose the best model
+    save_total_limit=1,
+    log_level='error'    
+)
+
+
+def compute_metrics(pred):
+    y_true = pred.label_ids
+    y_pred = sigmoid(pred.predictions)
+    y_pred = (y_pred > 0.5).astype(float)
+    clf_dict = classification_report(
+        y_true, y_pred, target_names=all_labels, zero_division=0, output_dict=True
+    )
+    return {"micro f1": clf_dict["micro avg"]["f1-score"],
+            "macro f1": clf_dict["macro avg"]["f1-score"]}
+
+
+config = AutoConfig.from_pretrained(model_ckpt)
+config.num_labels = len(all_labels)
+config.problem_type = 'multi_label_classification'
+
+for tr_s in train_slices:
+    model = AutoModelForSequenceClassification.from_pretrained(model_ckpt,
+        config=config)
+    trainer = Trainer(
+        model=model, tokenizer=tokenize,
+        args=training_args_fine_tune,
+        compute_metrics=compute_metrics,
+        train_dataset=ds_enc['train'].select(tr_s),
+        eval_dataset=ds_enc['valid']
+    )
+    
+    trainer.train()
+    pred = trainer.predict(ds_enc["test"])
+    metrics = compute_metrics(pred)
+    macro_scores["Fine-tune (vanilla)"].append(metrics["macro f1"])
+    micro_scores["Fine-tune (vanilla)"].append(metrics["micro f1"])
+
+
+plot_metrics(micro_scores, macro_scores, train_samples, "Fine-tune (vanilla)")
+info = """
+fine tune vanilla BERT model
+before this the behavior is a bit erratic, which is again due to training a model on a
+small sample where some labels can be unfavorably unbalances.
+"""
+
+## In-Context and Few-Shot Learning with Prompts
+# -------------------------------------------------- 
+prompt = """\
+Translate English to French:
+thanks =>
+"""
+
+# Leveraging Unlabeled Data
+# ****************************
+info_ = """
+domain adaptation (which we also saw for question answering in Chapter 7).
+Instead of retraining the language model from scratch, we can continue training it
+on data from our domain.
+
+In this step we use the classic language model objective of predicting masked words,
+which means we dont need any labeled data. 
+After that we can load the adapted model as a classifier and fine-tune it, 
+thus leveraging the unlabeled data.
+"""
+## Fine-Tuning a Language Model
+# -------------------------------------------------- 
+
+def tokenize(batch):
+    return tokenizer(batch['text'], truncation=True, max_length=128, return_special_tokens_mask=True)
+
+ds_mlm = ds.map(tokenize, batched=True)
+ds_mlm = ds_mlm.rename_column(['labels', 'text', 'label_ids'])
+
+info_ = """
+masks random tokens and creates labels for these sequences
+
+A much more elegant solution is to use data collator. Remember that the data collator is 
+the function that builds the bridge between the dataset and the model call.
+A batch is sampled from dataset, and the data collator prepares the elements in the batch to 
+feed them to model.
+
+"""
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer,
+    mlm_probability=0.15
+)
+set_seed(3)
+data_collator.return_tensors = 'np'
+ipts = tokenizer('Transformers are awesome!', return_tensors='np')
+opts = data_collator([{'input_ids': ipts['input_ids'][0]}])
+pd.DataFrame({
+    'Original tokens': tokenize.convert_ids_to_tokens(ipts['input_ids'][0]),
+    'Masked tokens': tokenize.convert_ids_to_tokens(opts['iput_ids'][0]),
+    'Original input_ids': ipts['input_ids'][0],
+    'Masked input_ids': opts['iput_ids'][0],
+    'Labels': opts['labels'][0] # the entries containing -100 are ignored when calculating the loss
+}).T
+
+data_collator.return_tensors = 'pt'
+training_args = TrainingArguments(
+    output_dir=f'{model_ckpt}-issues-128',
+    per_device_train_batch_size=32,
+    logging_strategy='epoch',
+    save_strategy='no',
+    num_train_epochs=16,
+    push_to_hub=True,
+    log_level='error',
+    report_to='none'
+)
+trainer = Trainer(
+    model=AutoModelForMaskedLM.from_pretrained('bert-base-uncased'),
+    tokenizer=tokenizer,
+    args=training_args,
+    data_collator=data_collator,
+    train_dataset=ds_mlm['unsup'],
+    eval_dataset=ds_mlm['train']
+)
+trainer.train()
+trainer.push_to_hub('Training complete!')
+# plot history
+df_log = pd.DataFrame(trainer.state.log_history)
+df_log.dropna(subset=['evel_loss']).reset_index()['eval_loss'].plot(label='Validation')
+df_log.dropna(subset=['loss']).reset_index()['loss'].plot(label='Train')
+plt.xlabel('Epoches')
+plt.ylabel('Loss')
+plt.legend(loc='upper right')
+plt.show()
+
+
+## Fine-Tuning a Classifier
+# -------------------------------------------------- 
+model_ckpt = f'{model_ckpt}-issues-128'
+config = AutoConfig.from_pretrained(model_ckpt)
+config.num_labels = len(all_labels)
+config.problem_type = 'multi_label_classification'
+
+for tr_s in train_slices:
+    model = AutoModelForSequenceClassification.from_pretrained(model_ckpt, config=config)
+    trainer = Trainer(
+        model=model,
+        tokenizer=tokenizer,
+        args=training_args_fine_tune,
+        compute_metrics=compute_metrics,
+        train_dataset=ds_enc['train'].select(tr_s)
+        eval_dataset=ds_enc['vaild']
+    )
+    trainer.train()
+    pred = trainer.predict(ds_enc['test'])
+    metrics = compute_metrics(pred)
+    macro_scores['Fine-tune (DA)'].append(metrics['macro f1'])
+    micro_scores['Fine-tune (DA)'].append(metrics['micro f1'])
+
+plot_metrics(micro_scores, macro_scores, train_samples, "Fine-tune (DA)")
+summary = """
+This highlights that domain adaption can provice a slight boost to the model's performance with 
+unlabeled dara and little effort. Naturally, the more unlabeled data and the less labeled data you have,
+the more impact you will get with this method.
+Before we conclude this chapter, we'll show you a few more tricks for taking advantage of unlabeled data.
+"""
+
+## Advanced Methods
+# --------------------------------------------------
+info_ = """
+there are sophisticated methods than can leverage unlabeled data even further.
+
+1. Unsupervised data augmentation (UDA)
+    - loss = Supervised Cross-entropy Loss + Unsupervised Consistency Loss
+        - Unsupervised Consistency Loss = Loss(P(y|x), P(y|\hat{ x })
+        - x: unlabeled data
+        - \hat{ x }: ublabeled dara Augmentations (Back translation / RandAugment / TF-IDF word replacement)
+    - The performance if this approach is quite impressive:
+        with a handful of labeled examples, BERT models trained with UDA get similar performance to models trained
+        on thousands of examples.
+2. Uncertainty-aware self-training (UST)
+    - train a teacher model on the labeled data and then use that model to create pseudo-labels on the unlabeled data.
+    then a student is trained on the pseudo-labeled data, and after training it becomes the teacher for the next iteration.
+    - pseudo-label generation:
+        - same input is fed several times through the mdoel with dropout turned on.
+        - the variance in the predictions gives a proxy for the certainty of the model on a specific sample.
+        - uncertainty measure the pesudo-labels are then sampled using a method called Bayesian Active Learning by Disagreement (BALD)
+
+"""
+
+
 
