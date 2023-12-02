@@ -39,6 +39,8 @@ from transformers import (
 )
 import torch
 from scipy.special import expit as sigmoid
+import os
+os.environ['CURL_CA_BUNDLE'] = ''
 
 # 1st、 Preparing the Data
 # -----------------------------------------------------------------
@@ -731,7 +733,7 @@ for tr_s in train_slices:
         tokenizer=tokenizer,
         args=training_args_fine_tune,
         compute_metrics=compute_metrics,
-        train_dataset=ds_enc['train'].select(tr_s)
+        train_dataset=ds_enc['train'].select(tr_s),
         eval_dataset=ds_enc['vaild']
     )
     trainer.train()

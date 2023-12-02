@@ -23,6 +23,10 @@ import torch
 from torch.utils.data import IterableDataset
 from transformers import GPT2Config, GPT2Model
 from transformers import OpenAIGPTConfig, OpenAIGPTModel
+from argparse import Namespace
+from torch.utils.tensorboard import SummaryWriter
+import logging
+import wandb
 os.environ['CURL_CA_BUNDLE'] = ''
 # 1. Large Datasets and Where to Find Them
 # -----------------------------------------------------
@@ -44,9 +48,9 @@ GPT was mostly trained on BookCorpus
 GPT-2 was trained on web pages, blogs, and news articles linked from Reddit.
 so that the main difference is the pretraining dataset,
 """
-# g_gpt2 = pipeline('text-generation', model='gpt2')
-g_gpt2 = GPT2Model(GPT2Config())
-g_gpt = OpenAIGPTModel(OpenAIGPTConfig())
+g_gpt2 = pipeline('text-generation', model='gpt2')
+# g_gpt2 = GPT2Model(GPT2Config())
+# g_gpt = OpenAIGPTModel(OpenAIGPTConfig())
 g_gpt  = pipeline('text-generation', model='openai-gpt')
 
 
@@ -54,8 +58,8 @@ g_gpt  = pipeline('text-generation', model='openai-gpt')
 def model_size(model):
     return sum(t.numel() for t in model.parameters())
 
-print(f"GPT size: {model_size(g_gpt)/1000**2:.1f}M parameters")
-print(f"GPT2 size: {model_size(g_gpt2)/1000**2:.1f}M parameters")
+print(f"GPT size: {model_size(g_gpt.model)/1000**2:.1f}M parameters")
+print(f"GPT2 size: {model_size(g_gpt2.model)/1000**2:.1f}M parameters")
 # GPT size: 116.5M parameters
 # GPT2 size: 124.4M parameters
 
@@ -473,21 +477,118 @@ print(f"Lengths of the sequences: {len_}")
 
 ## 3.4 Defining the Training loop
 # *****************************************************
+info = """
+data parallelism: which will help us utilize several GPUs for training
+use huggingface Accelerate to make our code scalable.
+- distributed training
+- changing the underlying hardware for training —— easy
+- make training scripts run with mixed precision and in any kind of distributed setting
+"""
+torch.cuda.get_device_name() # 'NVIDIA GeForce RTX 4070 Ti'
+torch.cuda.device_count() # 1
 
+# train loop -> chaper10_trainloop.py
+# 1- config
+config = {
+    "train_batch_size": 2, # 12
+    "valid_batch_size": 2, # 12
+    "weight_decay": 0.1,
+    "shuffle_buffer": 1000,
+    "learning_rate": 2e-4, # 5e-4
+    "lr_scheduler_type": "cosine",
+    "num_warmup_steps": 750, # 2000
+    "gradient_accumulation_steps": 16, # 1
+    "max_train_steps": 50000, # 150000
+    "max_eval_steps": -1,
+    "seq_length": 1024,
+    "seed": 1,
+    "save_checkpoint_steps": 50000
+}
+args = Namespace(**config)
 
+# ********************************************************
+# the heart of the training script:
+from accelerate import Accelerator
+from Chapyter10_trainLoop import (
+    setup_logging, create_dataloaders, 
+    get_grouped_params, log_metrics,
+    evaluate
+)
+from torch.optim import AdamW
+from transformers.optimization import get_scheduler
 
+set_seed(args.seed)
+# Accelerator
+accelerator = Accelerator()
+samples_per_step = accelerator.state.num_processes * args.train_batch_size
 
+# Logging
+logger, tb_writer, run_name = setup_logging(project_name.split("/")[1])
+logger.info(accelerator.state)
 
+# Load model and tokenizer
+if accelerator.is_main_process:
+    hf_repo = Repository('./', clone_from=project_name, revision=run_name)
 
+model = AutoModelForCausalLM.from_pretrained("./", gradient_checkpointing=True)
+tokenizer = AutoTokenizer.from_pretrained("./")
 
+# Load dataset and dataloader
+train_dataloader, eval_dataloader = create_dataloaders(dataset_name)
 
+# Prepare the optimizer and learning rate scheduler
+opt = AdamW(get_grouped_params(model), lr=args.learning_rate)
+lr_scheduler = get_scheduler(
+    name=args.lr_scheduler_type,
+    optimizer=opt,
+    num_warmup_steps=args.num_warmup_steps,
+    num_training_steps=args.max_train_steps
+)
 
+def get_lr():
+    return opt.param_groups[0]['lr']
 
+# Train model
+model.train()
+completed_steps = 0
+for step, batch in enumerate(train_dataloader, start=1):
+    loss = model(batch, labels=batch).loss
+    log_metrics(
+        step, {
+            'lr': get_lr, 
+            'samples': step * samples_per_step,
+            'steps': completed_steps,
+            'loss/train': loss.items()
+            }
+    )
+    loss = loss / args.gradient_accumlation_steps
+    accelerator.backward(loss)
+    if step % args.gradient_accumulation_steps == 0:
+        opt.step()
+        lr_scheduler.step()
+        opt.zero_grad()
+        completed_steps += 1
+    if step % args.save_checkpoint_steps == 0:
+        logger.info('Evaluating and saving model checkpoint')
+        eval_loss, perplexity = evaluate()
+        log_metrics(step, {'loss/eval': eval_loss, 'perplexity': perplexity})
+        accelerator.wait_for_everyone()
+        unwrapped_model = accelerator.unwrap_model(model)
+        if accelerator.is_main_process:
+            unwrapped_model.save_pretrained("./")
+            hf_repo.push_to_hub(commit_message=f'step {step}')
+    model.train()
+    if completed_steps >= args.max_train_steps:
+        break
 
-
-
-
-
+# Evaluate and save the last checkpoint
+logger.info('Evaluating and save model after training')
+eval_loss, perplexity = evaluate()
+log_metrics(step, {'loss/val': eval_loss, 'perplexity': perplexity})
+accelerator.wait_for_everyone()
+if accelerator.is_main_process:
+    unwrapped_model.save_pretrained("./")
+    hf_repo.push_to_hub(commit_message=f'final model')
 
 
 
