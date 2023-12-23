@@ -590,5 +590,15 @@ if accelerator.is_main_process:
     unwrapped_model.save_pretrained("./")
     hf_repo.push_to_hub(commit_message=f'final model')
 
+important_info = """
+1. Model saving
 
+2. Optimization
+
+3. Evaluation
+
+4. Gradient accumulation and checkpointing
+
+
+"""
 
