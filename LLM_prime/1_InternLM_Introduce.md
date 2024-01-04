@@ -1,3 +1,6 @@
+reference video: [bilibili-书生·浦语大模型全链路开源体系](https://www.bilibili.com/video/BV1Rc411b7ns/)
+reference Github: [https://github.com/InternLM/tutorial](https://github.com/InternLM/tutorial)
+
 # 一、从模型到应用
 
 ```mermaid
