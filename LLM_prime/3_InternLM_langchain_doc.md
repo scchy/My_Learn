@@ -212,11 +212,9 @@ LangChain 通过提供检索问答链对象来实现对于 RAG 全流程的封�
 这里看这个图就会更加的清晰
 ![LangChain](./pic/lc_all.jpg)
 
-
 1. 加载向量数据库
 2. 实例化自定义 LLM 与 Prompt Template
 3. 构建检索问答链
-
 
 
 ```python
