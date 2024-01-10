@@ -418,4 +418,111 @@ demo.launch()
 
 > 选择一个垂直领域，收集该领域的专业资料构建专业知识库，并搭建专业问答助手，并在 [OpenXLab](https://openxlab.org.cn/apps) 上成功部署（截图，并提供应用地址）
 
+## 1- 准备菜谱向量数据库
 
+1. 本地运行: 数据准备和处理
+2. 本地运行: 数据上传到`openxlab`
+```python
+from openxlab.dataset import upload_file
+
+upload_file(
+    dataset_repo='Scchy/LLM-Data', 
+    source_path='cookingBook.json', 
+    # target_path='Scchy/LLM-Data'
+)
+```
+![data](./pic/openxlab_data.jpg)
+
+1. openxlab平台自动执行: 数据下载和`sentence-transformer`模型下载 -> 文本分块 -> 向量化 -> 保存到向量数据库 -> 向量数据库持久化到磁盘上
+   1. 需要注意，平台上 `split_docs` 最大只支持 `batch size 41666`
+```python
+import os
+from langchain.document_loaders import JSONLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+from langchain.vectorstores import Chroma
+from openxlab.dataset import download
+
+
+def openxlab_download():
+    load_d = '/home/xlab-app-center/data'
+    if not os.path.exists(load_d):
+        os.system(f'mkdir -p {load_d}')
+    
+    out_f =  f'{load_d}/Scchy___LLM-Data/cookingBook.json'
+    if not os.path.exists(out_f):
+        download(dataset_repo='Scchy/LLM-Data', source_path='cookingBook.json', target_path=load_d)
+        
+    sentence_tf_path = '/home/xlab-app-center/sentence-transformer'
+    if not os.path.exists(sentence_tf_path):
+        os.system(f'huggingface-cli download --resume-download sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --local-dir {sentence_tf_path}')
+    return out_f, sentence_tf_path
+
+
+def file2Chroma2local():
+    # 2- 加载数据 /home/xlab-app-center/
+    js_f, sentence_tf_path = openxlab_download()
+    docs = []
+    docs.extend(
+        JSONLoader(
+            js_f,
+            jq_schema='.[].content',
+            text_content=False
+        ).load()
+    )
+
+    print('>>>>>>>>> [ 2- 加载数据 ]( 完成 )')
+    # 3- 构建向量数据库
+    ## 3.1 文本分块
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+    split_docs = text_splitter.split_documents(docs)[:41660]
+    print('>>>>>>>>> [ 3-构建向量数据库 | 文本分块]( 完成 )')
+    ## 3.2 向量化-embedding模型
+    embeddings = HuggingFaceEmbeddings(model_name=sentence_tf_path)
+    print('>>>>>>>>> [ 3-构建向量数据库 | 向量化-embedding]( 完成 )')
+    ## 3.3 语料加载到指定路径下的向量数据库
+    # 定义持久化路径
+    persist_directory = '/home/xlab-app-center/data_base/vector_db/chroma'
+    if not os.path.exists(persist_directory):
+        os.system(f'mkdir -p {persist_directory}')
+    
+    ## 加载数据库
+    vectordb = Chroma.from_documents(
+        documents=split_docs,
+        embedding=embeddings,
+        persist_directory=persist_directory
+    )
+    # 将加载的向量数据库持久化到磁盘上
+    vectordb.persist()
+    print('>>>>>>>>> [ 3-构建向量数据库 | 向量数据库持久化到磁盘上]( 完成 )')
+    return persist_directory
+```
+
+## 2- 最终App文件
+>  [LLM_CookingAssistant:  app.py](https://github.com/scchy/LLM_CookingAssistant/blob/main/app.py)
+
+1. 下载`InternLM-7b`模型
+```python
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+# 模型下载
+local_path = "/home/xlab-app-center/InternLM-7b"
+lm_7b_path = "/home/xlab-app-center/.cach/model/OpenLMLab_InternLM-7b"
+sentence_tf_path = '/home/xlab-app-center/sentence-transformer'
+if not os.path.exists(lm_7b_path):
+    download(model_repo='OpenLMLab/InternLM-7b', model_name='InternLM-7b', output=local_path)
+```
+1. 加载向量数据库
+2. 实例化自定义 LLM 与 Prompt Template
+3. 构建检索问答链
+
+![deploy-progress](./pic/openxlab_deploy.jpg)
+
+tip:
+- requires sqlite3 ＞= 3.35.0 修复
+  - 在`requirements.txt`` 文件中增加依赖`pysqlite3-binary`
+  - add code in `app.py`
+```python
+import sys
+import pysqlite3
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+```
