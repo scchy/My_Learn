@@ -45,6 +45,7 @@ reference: [https://github.com/InternLM/tutorial/blob/main/langchain/readme.md](
 ![data](./pic/openxlab_data.jpg)
 2. 部署
 ![deploy](./pic/openxlab_deploy.jpg)
-3. 应用截图 (add pic 01-11 ninght)
-
+3. 应用截图 
+![app2](./pic/openxlab_app2.jpg)
+![app1](./pic/openxlab_app.jpg)
 

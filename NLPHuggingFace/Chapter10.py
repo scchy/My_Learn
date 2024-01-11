@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 import torch
 from torch.utils.data import IterableDataset
-from transformers import GPT2Config, GPT2Model
+from transformers import GPT2Config, GPT2Model, GPT2LMHeadModel
 from transformers import OpenAIGPTConfig, OpenAIGPTModel
 from argparse import Namespace
 from torch.utils.tensorboard import SummaryWriter
@@ -48,12 +48,17 @@ GPT was mostly trained on BookCorpus
 GPT-2 was trained on web pages, blogs, and news articles linked from Reddit.
 so that the main difference is the pretraining dataset,
 """
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 g_gpt2 = pipeline('text-generation', model='gpt2')
 # g_gpt2 = GPT2Model(GPT2Config())
 # g_gpt = OpenAIGPTModel(OpenAIGPTConfig())
 g_gpt  = pipeline('text-generation', model='openai-gpt')
+g_gpt2_ = GPT2LMHeadModel(GPT2Config())
+g_got2_p = GPT2LMHeadModel.from_pretrained('gpt2', config=GPT2Config())
 
-
+g_gpt2.model.lm_head.weight[:2, :10]
+g_gpt2_.lm_head.weight[:2, :10]
+g_got2_p.lm_head.weight[:2, :10]
 
 def model_size(model):
     return sum(t.numel() for t in model.parameters())

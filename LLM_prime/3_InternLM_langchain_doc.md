@@ -526,3 +526,7 @@ import sys
 import pysqlite3
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 ```
+5. 部署完成
+[烹饪助手 https://openxlab.org.cn/apps/detail/Scchy/LLM_CookingAssistant](https://openxlab.org.cn/apps/detail/Scchy/LLM_CookingAssistant)
+![app2](./pic/openxlab_app2.jpg)
+![app1](./pic/openxlab_app.jpg)
