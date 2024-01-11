@@ -506,11 +506,10 @@ def file2Chroma2local():
 ```python
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 # 模型下载
-local_path = "/home/xlab-app-center/InternLM-7b"
-lm_7b_path = "/home/xlab-app-center/.cach/model/OpenLMLab_InternLM-7b"
+lm_7b_path = "/home/xlab-app-center/InternLM-chat-7b"
 sentence_tf_path = '/home/xlab-app-center/sentence-transformer'
 if not os.path.exists(lm_7b_path):
-    download(model_repo='OpenLMLab/InternLM-7b', model_name='InternLM-7b', output=local_path)
+    download(model_repo='OpenLMLab/InternLM-chat-7b', output=lm_7b_path)
 ```
 1. 加载向量数据库
 2. 实例化自定义 LLM 与 Prompt Template
