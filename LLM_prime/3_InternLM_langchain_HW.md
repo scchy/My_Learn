@@ -39,7 +39,7 @@ reference: [https://github.com/InternLM/tutorial/blob/main/langchain/readme.md](
 # 6- 进阶作业
 
 选择一个垂直领域，收集该领域的专业资料构建专业知识库，并搭建专业问答助手，并在 [OpenXLab](https://openxlab.org.cn/apps) 上成功部署
-
+> [应用地址: 烹饪大师（五星大厨）](https://openxlab.org.cn/apps/detail/Scchy/LLM_CookingAssistant)
 
 1. 数据上传
 ![data](./pic/openxlab_data.jpg)

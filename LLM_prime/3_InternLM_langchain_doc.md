@@ -417,6 +417,7 @@ demo.launch()
 # 进阶作业
 
 > 选择一个垂直领域，收集该领域的专业资料构建专业知识库，并搭建专业问答助手，并在 [OpenXLab](https://openxlab.org.cn/apps) 上成功部署（截图，并提供应用地址）
+> [应用地址: 烹饪大师（五星大厨）](https://openxlab.org.cn/apps/detail/Scchy/LLM_CookingAssistant)
 
 ## 1- 准备菜谱向量数据库
 
