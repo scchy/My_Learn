@@ -125,7 +125,8 @@ python ./cli_demo.py
 
 数据下载
 ```shell
-~/ft-oasst1
+mkdir ft-medqa
+~/ft-medqa
 git clone https://github.com/abachaa/Medication_QA_MedInfo2019
 cd Medication_QA_MedInfo2019 && \
 mv MedInfo2019-QA-Medications.xlsx ../ && \
@@ -286,14 +287,63 @@ apt install git git-lfs
 git lfs install
 git lfs clone https://www.modelscope.cn/xtuner/internlm-7b-qlora-msagent-react.git
 ```
-![tree](./pic/xtun_ag_tree.jpg)
-4. 添加 serper 环境变量 `export SERPER_API_KEY=abcdefg`
-5. 启动
+![tree](./pic/xtun_ag_tree.jpg)  
+4. 添加 serper 环境变量 `export SERPER_API_KEY=abcdefg`  
+5. 启动  
    1. `xtuner chat ./internlm-chat-7b --adapter internlm-7b-qlora-msagent-react --lagent`
 
 
+# 4- 小结
 
+微调的主要流程如下
 
+```mermaid
+graph LR
 
+A(环境准备-Xtuner安装) --> B1(数据准备) --> B11(数据预处理)
+A --> B2(模型下载)
+B11 --> C(模型配置)
+B2 --> C
 
+C --> D(模型微调-work_dirs) --> E(转HF-Adapter\n`xtuner convert pth_to_hf`) --> F(模型合并\n`xtuner convert merge`)
+
+F --> G(测试) --> deploy(部署)
+G --> demo(web Demo)
+
+```
+注：
+- 配置：`xtuner copy-cfg internlm_chat_7b_qlora_oasst1_e3 .`
+- 微调：`xtuner train internlm_chat_7b_qlora_oasst1_e3_copy.py --deepspeed deepspeed_zero2`
+- 测试: `xtuner chat ./hf_merge --prompt-template internlm_chat`
+- 转Adaoter & merge:
+```shell
+# hf
+# ----------------------------------
+mkdir hf
+export MKL_SERVICE_FORCE_INTEL=1
+export CONFIG_NAME_OR_PATH=internlm_chat_7b_qlora_oasst1_e3_copy.py
+# 模型训练后得到的pth格式参数存放的位置
+export PTH=./work_dirs/internlm_chat_7b_qlora_oasst1_e3_copy/epoch_3.pth
+export SAVE_PATH=./hf
+# 执行参数转换
+xtuner convert pth_to_hf $CONFIG_NAME_OR_PATH $PTH $SAVE_PATH
+
+# merge 
+# ----------------------------------
+mkdir hf_merge
+export MKL_SERVICE_FORCE_INTEL=1
+export MKL_THREADING_LAYER='GNU'
+# 原始模型参数存放的位置
+export NAME_OR_PATH_TO_LLM=./internlm-chat-7b
+# Hugging Face格式参数存放的位置
+export NAME_OR_PATH_TO_ADAPTER=./hf
+# 最终Merge后的参数存放的位置
+export SAVE_PATH=./hf_merge
+# 执行参数Merge
+xtuner convert merge \
+    $NAME_OR_PATH_TO_LLM \
+    $NAME_OR_PATH_TO_ADAPTER \
+    $SAVE_PATH \
+    --max-shard-size 2GB
+```
 

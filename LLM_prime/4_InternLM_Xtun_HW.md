@@ -90,7 +90,7 @@ cp -r  /root/ft-msagent/internlm-chat-7b .
 xtuner copy-cfg internlm_chat_7b_qlora_oasst1_e3 .
 ```
 4. 模型微调 `xtuner train internlm_chat_7b_qlora_oasst1_e3_copy.py --deepspeed deepspeed_zero2`
-5. 转hf & 模型合并
+5. 转hf(adapter) & 模型合并
 ```shell
 # hf
 # ----------------------------------
@@ -154,16 +154,40 @@ streamlit run code/InternLM/web_demo.py --server.address 127.0.0.1 --server.port
 
 # 二、进阶作业：
 
-1. 将训练好的Adapter模型权重上传到 OpenXLab、Hugging Face 或者 MoelScope 任一一平台。
+## 2.1 将训练好的Adapter模型权重上传到 OpenXLab、Hugging Face 或者 MoelScope 任一平台。
+
+[Adapter 文件目录](https://www.modelscope.cn/models/sccHyFuture/LLM_medQA_adapter/files)
+
+
 ```python
-from openxlab.model import upload
+# 1- 执行目录 /root/ft-medqa
+# 2- 创建 configuration.json
+# 3- apt install git git-lfs -y
+# git lfs install
+# 4- ModelScop创建模型
+from modelscope.hub.api import HubApi
 
-upload(model_repo='Scc_hy/LLM_models',
-              file_type='metafile'
-              source="/path/to/local/folder/metafile.yaml")
+# 请从ModelScope个人中心->访问令牌获取'
+YOUR_ACCESS_TOKEN = 'xxx'
 
+api = HubApi()
+api.login(YOUR_ACCESS_TOKEN)
+api.push_model(
+    model_id="sccHyFuture/LLM_medQA_adapter", 
+    model_dir="./hf"
+)
 ```
-2. 将训练好后的模型应用部署到 OpenXLab 平台
+![ms](./pic/modelscope.jpg)
+
+
+
+## 2.2 将训练好后的模型应用部署到 OpenXLab 平台
+
+1. download 训练好的adapter
+2. download 模型
+3. merge
+4. streamlit 部署
+
 
 
 
