@@ -3,7 +3,7 @@
 构建数据集，使用 XTuner 微调 InternLM-Chat-7B 模型, 让模型学习到它是你的智能小助手，效果如下图所示，本作业训练出来的模型的输出需要将不要葱姜蒜大佬替换成自己名字或昵称！
 
 
-## 训练
+## 1. 训练
 1. 数据准备
    1. `mkdir -p /root/personal_assistant/data && cd /root/personal_assistant/data`
    2. 数据样例
@@ -133,17 +133,34 @@ xtuner convert merge \
 ![bf](./pic/xtun_base_hw_bf_tr.jpg)
 
 微调后（对自己的身份有了清晰的认知）
-![aft]()
+![aft](./pic/xtun_base_hw_aft_tr.jpg)
 
-## 网页Demo
+## 2. 网页Demo
 
+```shell
+pip install streamlit==1.24.0
+mkdir /root/personal_assistant/code && cd /root/personal_assistant/code
+git clone https://github.com/InternLM/InternLM.git
 
+# 修改 code/InternLM/web_demo.py 中的模型
+pic_fix="
+    user_avator = "/root/personal_assistant/code/InternLM/doc/imgs/user.png"
+    robot_avator = "/root/personal_assistant/code/InternLM/doc/imgs/robot.png"
+"
+#  ssh -CNg -L 6006:127.0.0.1:6006 root@ssh.intern-ai.org.cn -p 34094
+streamlit run code/InternLM/web_demo.py --server.address 127.0.0.1 --server.port 6006
+```
+![web](./pic/xtun_base_hw_web.jpg)
 
-# 进阶作业：
+# 二、进阶作业：
 
 1. 将训练好的Adapter模型权重上传到 OpenXLab、Hugging Face 或者 MoelScope 任一一平台。
 ```python
-import openxlab
+from openxlab.model import upload
+
+upload(model_repo='Scc_hy/LLM_models',
+              file_type='metafile'
+              source="/path/to/local/folder/metafile.yaml")
 
 ```
 2. 将训练好后的模型应用部署到 OpenXLab 平台
