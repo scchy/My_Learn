@@ -183,10 +183,14 @@ api.push_model(
 
 ## 2.2 将训练好后的模型应用部署到 OpenXLab 平台
 
-1. download 训练好的adapter
-2. download 模型
-3. merge
-4. streamlit 部署
+[github: LLM_medQA](https://github.com/scchy/LLM_medQA)
+
+1. `modelscope` download 训练好的adapter
+2. `openxlab` download 模型
+3. `xtuner` merge
+4. gr 部署
+
+
 
 
 
