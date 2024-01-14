@@ -288,10 +288,19 @@ git lfs install
 git lfs clone https://www.modelscope.cn/xtuner/internlm-7b-qlora-msagent-react.git
 ```
 ![tree](./pic/xtun_ag_tree.jpg)  
-4. 添加 serper 环境变量 `export SERPER_API_KEY=abcdefg`  
-5. 启动  
+4. 添加 serper 环境变量 
+   1. `export SERPER_API_KEY=66b215b8866de8c0cbd0b03b0ed0cbaa4f684f13`   这部分的注册是需要科学上网
+   2. `export MKL_SERVICE_FORCE_INTEL=1`
+   3. `export MKL_THREADING_LAYER='GNU'`
+   4. `pip install tritonclient`
+   5. `pip install grpcio`
+   6. `pip install grpcio-tools googleapis-common-protos`
+   7. `vim /root/xtuner019/xtuner/xtuner/tools/chat.py`
+![serper](./pic/xtun_serper.jpg)
+1. 启动  
    1. `xtuner chat ./internlm-chat-7b --adapter internlm-7b-qlora-msagent-react --lagent`
 
+![sp_demo](./pic/xtun_serper_dm.jpg)
 
 # 4- 小结
 
