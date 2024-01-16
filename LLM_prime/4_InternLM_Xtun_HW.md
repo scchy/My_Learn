@@ -190,7 +190,7 @@ api.push_model(
 3. `xtuner` merge
 4. gr 部署
 
-
+![xt-improv](./pic/xtun_HW_improv2.jpg)
 
 
 

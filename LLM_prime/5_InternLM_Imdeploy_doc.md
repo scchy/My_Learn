@@ -202,6 +202,38 @@ use_logn_attn = 0
 
 ## 3.1 KV Cache 量化
 
+### KV Cache 提速的原因
+
+Decoder 推理时，最大的不同在于**自回归结构**，从图中我们可以看出每个timestep的输出都是下一个timestep的输入，所以无法像Encoder一样一口气过，每次都要 attend 之前的所有的 timestep。 
+
+计算开销$1+(1+2)+(1+2+3)+...+(1+2+..+n)$也就是$O(N^3)$,而内存开销则是$O(N^2)$
+![kv_q](./pic/kv_exp1.jpg)
+
+Decoder  每次前向，当前 timestep 计算 Attention 要用到的部分，如之前 timestep 的 KV （Key 和 Value）值都计算过的，只是之前每次前向完后给计算结果都丢掉，只保留最后输出。
+
+于是一个很自然的想法就是 Cache。这很像斐波那契递归函数，naive 版本，也会出现不断重复计算问题，加个 cache 瞬间提速。
+每次前向完，给 KV 都保留下来，用于之后计算。
+
+```python
+# q、k、v 当前 timestep 的 query，key，value
+# K_prev,V_prev 之前所有 timestep 的 key 和 value
+for _ in range(time_step):
+    ...
+    K = torch.cat([K_prev, k], dim=-2) #[b, h, n, d]
+    V = torch.cat([V_prev, v], dim=-2) #[b, h, n, d]
+
+    logits = torch.einsum("bhd,bhnd->bhn", q, K)
+    weights = torch.softmax(logits/math.sqrt(d), dim=-1)
+    outs = torch.einsum("bhn,bhnd->bhd", weights, V)
+    ...
+    
+    K_prev, V_prev = K, V
+```
+
+
+
+### KV Cache 量化步骤
+
 1. 计算 minmax。主要思路是通过计算给定输入样本在每一层不同位置处计算结果的统计情况。
    - 对于 Attention 的 K 和 V：取每个 Head 各自维度在所有Token的最大、最小和绝对值最大值。对每一层来说，上面三组值都是 (num_heads, head_dim) 的矩阵。这里的统计结果将用于本小节的 KV Cache。
    - 对于模型每层的输入：取对应维度的最大、最小、均值、绝对值最大和绝对值均值。每一层每个位置的输入都有对应的统计值，它们大多是 (hidden_dim, ) 的一维向量，当然在 FFN 层由于结构是先变宽后恢复，因此恢复的位置维度并不相同。这里的统计结果用于下个小节的模型参数量化，主要用在缩放环节（回顾PPT内容）。
@@ -336,11 +368,6 @@ D --> JJE{评估效果} --> |效果可以|F(结束)
 JJE -->|效果不行|C
 
 ```
-
-
-
-
-
 
 
 
