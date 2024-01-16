@@ -229,6 +229,18 @@ for _ in range(time_step):
     
     K_prev, V_prev = K, V
 ```
+<font color=darkred>于是 Decoder 就被优化成，计算开销变成了$O(N^2)$，存储复杂度则是$O(N)$，只给 K 和 V 不断保存在缓存中就行。问题解决了！</font>
+
+### KV Cache 显存计算
+从上面的代码我们就可以非常轻松的计算出
+
+KV-cache占的显存：
+
+**Cache_ele** = 2 * (batch_size * num_head * sequen_len * head_dim) * num_layer  
+**Cache_mem** = Cache_ele * dataType-size / 1024**3 GB
+
+- KVQ维度`[b, h, n, d]`: batch_size * num_head * sequen_len * head_dim
+- q维度`[b, h, d]`: batch_size * num_head * head_dim
 
 
 
