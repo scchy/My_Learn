@@ -16,12 +16,10 @@
   - 统计maxmin
   - 模型量化
   - 模型转换
-  - 模型上传到 `modelscope`
+  - 模型上传到 `modelscope`[LLM_W4A16_7B](https://www.modelscope.cn/models/sccHyFuture/LLM_W4A16_7B/summary) ![model_d](./pic/modelscope_deploy.jpg)
 - 模型部署
   - 部署github: [LLM_W4A16_myAssistant](https://github.com/scchy/LLM_W4A16_myAssistant)
-  - 部署应用openxlab地址 [https://openxlab.org.cn/apps/detail/Scchy/LLM_scc_Assistant](https://openxlab.org.cn/apps/detail/Scchy/LLM_scc_Assistant)
-
-![pic](./pic/deploy_HW_selfassistant.jpg)
+  - 部署应用openxlab地址 [https://openxlab.org.cn/apps/detail/Scchy/LLM_scc_Assistant](https://openxlab.org.cn/apps/detail/Scchy/LLM_scc_Assistant) ![pic](./pic/deploy_HW_selfassistant.jpg)
 
 
 ## 2.2 量化比对
@@ -72,7 +70,7 @@ lmdeploy lite kv_qparams \
   --num_tp 1
 ```
 - [ ] 如何比对
-  - [ ] 比对参数设置`xx_workspace/triton_models/weights/config.ini` :`max_batch_size = 1` 和 `session_len = 512` 和 `quant_policy=4 & 0`
+  - [X] 比对参数设置`xx_workspace/triton_models/weights/config.ini` :`max_batch_size = 1` 和 `session_len = 512` 和 `quant_policy=4 & 0`
   - [ ] 问题：你是谁
 - [ ] 如何启动
   - [X] 启动原始的模型（离线转换后）`lmdeploy serve gradio ./workspace_7bOrg`
