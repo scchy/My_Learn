@@ -7,9 +7,26 @@
 
 # 二、进阶作业 
 
-1. 将第四节课训练自我认知小助手模型使用 LMDeploy 量化部署到 OpenXLab 平台。
 
-2. 对internlm-chat-7b <font color=darkred>模型进行量化，并同时使用KV Cache量化</font>，使用量化后的模型完成API服务的部署。
+## 2.1 自我认知小助手模型量化部署
+将第四节课训练自我认知小助手模型使用 LMDeploy 量化部署到 OpenXLab 平台。  
+在第四节中已经将Xtun微调的参数转成adapter，并和原来的模型进行合并。
+- 因为过拟合所以将造的数据和MedQA2019数据进行混合，再微调-最终解决过拟合问题
+  - 产出文件模型文件在：`/root/personal_assistant/hf_merge`
+- 进行基本量化流程
+  - 统计maxmin
+  - 模型量化
+  - 模型转换
+  - 模型上传到 `modelscope`
+- 模型部署
+  - 部署github: [LLM_W4A16_myAssistant](https://github.com/scchy/LLM_W4A16_myAssistant)
+  - 部署应用openxlab地址 [https://openxlab.org.cn/apps/detail/Scchy/LLM_scc_Assistant](https://openxlab.org.cn/apps/detail/Scchy/LLM_scc_Assistant)
+
+![pic](./pic/deploy_HW_selfassistant.jpg)
+
+
+## 2.2 量化比对
+对internlm-chat-7b <font color=darkred>模型进行量化，并同时使用KV Cache量化</font>，使用量化后的模型完成API服务的部署。
    - 分别对比模型量化前后和 KV Cache 量化前后的显存大小（将 bs设置为 1 和 max len 设置为512）。
 ```shell
 # 0- 离线模型装换
@@ -70,16 +87,18 @@ lmdeploy lite kv_qparams \
 | internlm-chat-7b | `max_batch_size = 1` 和 `session_len = 512` 和 `quant_policy=0` | ![base](./pic/deploy_HW2_base.jpg) | 14654 MiB -> 14726 MiB (72 MiB)|
 | internlm-chat-7b + KV Cache| `max_batch_size = 1` 和 `session_len = 512` 和 `quant_policy=4` |![kv](./pic/deploy_HW2_kv.jpg) | 14622 MiB -> 14630iB (8 MiB)|
 | internlm-chat-7b-Qunt| `max_batch_size = 1` 和 `session_len = 512` 和 `quant_policy=0` |![q](./pic/deploy_HW2_q.jpg) | 5692 MiB -> 5760 MiB (68 MiB)| 
-| internlm-chat-7b-Qunt + KV Cache | `max_batch_size = 1` 和 `session_len = 512` 和 `quant_policy=4` |![q](./pic/deploy_HW2_q_kv.jpg) | 5660 MiB -> 5696 MiB (36 MiB)| 
+| internlm-chat-7b-Qunt + KV Cache | `max_batch_size = 1` 和 `session_len = 512` 和 `quant_policy=4` |![q](./pic/deploy_HW2_q_kv.jpg) | 5660 MiB -> 5696 MiB (36 MiB)   **因为推理用FP16所以会额外多占一些显存**| 
 
 
 
-2. 在自己的任务数据集上任取若干条进行Benchmark测试，测试方向包括：
-    1. TurboMind推理+Python代码集成
-    2. 在（1）的基础上采用W4A16量化
-    3. 在（1）的基础上开启KV Cache量化
-    4. 在（2）的基础上开启KV Cache量化
-    5. 使用Huggingface推理
+## 2.3 在任务数据集上进行测试比对
+
+在自己的任务数据集上任取若干条进行Benchmark测试，测试方向包括：
+1. TurboMind推理+Python代码集成
+2. 在（1）的基础上采用W4A16量化
+3. 在（1）的基础上开启KV Cache量化
+4. 在（2）的基础上开启KV Cache量化
+5. 使用Huggingface推理
 
 
 

@@ -339,7 +339,13 @@ A(量化) -->|lmdeploy lite calibrate|B(1. 计算minmax)
 B-->|lmdeploy lite kv_qparams|KC(通过minmax获取量化KV参数)
 KC --> KD(修改配置) --> KE(`quant_policy=4`)
 B-->|lmdeploy lite auto_awq|WC(通过minmax获取量化权重模型参数)
-WC -->|lmdeploy convert|WD(转换成TurboMind格式)
+WC -->|lmdeploy convert|WD(转换成TurboMind格式) --> WX(TurboMind服务)
+
+WC -->|python加载|WE(lmdeploy.turbomind.TurboMind.from_pretrained)
+WC -->|量化+KV Cache|KC
+
+
+KE --> WE
 
 ```
 

@@ -75,7 +75,7 @@ def g_json(file, out_file,  n=1000):
 if __name__ == '__main__':
     file = 'personal_assistant.jsonl'
     out_file = 'personal_assistant_final.jsonl'
-    g_json(file, out_file,  n=1000)
+    g_json(file, out_file,  n=20)
 ```
 ![g](./pic/xtun_base_hw1.jpg)
 
@@ -100,7 +100,7 @@ mkdir hf
 export MKL_SERVICE_FORCE_INTEL=1
 export CONFIG_NAME_OR_PATH=internlm_chat_7b_qlora_oasst1_e3_copy.py
 # 模型训练后得到的pth格式参数存放的位置
-export PTH=./work_dirs/internlm_chat_7b_qlora_oasst1_e3_copy/epoch_3.pth
+export PTH=./work_dirs/internlm_chat_7b_qlora_oasst1_e3_copy/epoch_1.pth
 export SAVE_PATH=./hf
 
 # 执行参数转换
