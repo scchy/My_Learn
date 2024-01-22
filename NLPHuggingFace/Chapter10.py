@@ -28,6 +28,7 @@ from torch.utils.tensorboard import SummaryWriter
 import logging
 import wandb
 os.environ['CURL_CA_BUNDLE'] = ''
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 # 1. Large Datasets and Where to Find Them
 # -----------------------------------------------------
 
@@ -48,7 +49,7 @@ GPT was mostly trained on BookCorpus
 GPT-2 was trained on web pages, blogs, and news articles linked from Reddit.
 so that the main difference is the pretraining dataset,
 """
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+
 g_gpt2 = pipeline('text-generation', model='gpt2')
 # g_gpt2 = GPT2Model(GPT2Config())
 # g_gpt = OpenAIGPTModel(OpenAIGPTConfig())
@@ -138,7 +139,7 @@ AND    (c.size BETWEEN 1024 AND 1048575))
 ### Memory mapping
 
 download_cfg = DownloadConfig(delete_extracted=True)
-dataset = load_dataset('./codeparrot', split='train', download_config=download_cfg)
+dataset = load_dataset('/home/scc/Downloads/Datas/huggingfaceData/codeparrot', split='train') #, download_config=download_cfg)
 
 print(f'Number of python files code in dataset: {len(dataset)}')
 ds_size = sum(os.stat(f['filename'] for f in dataset.cache_files))

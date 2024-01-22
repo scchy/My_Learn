@@ -5,6 +5,8 @@
 # kaggle: kaggle上运行会更快 https://www.kaggle.com/code/scchuy/nlptransformers-chapter5-textgeneration
 # =================================================================================
 import torch
+from torch import nn 
+from torch.nn import functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm.auto import tqdm
 import pandas as pd
@@ -53,3 +55,83 @@ input_text = 'Transformers are the'
 input_ids = tokenizer(input_text, return_tensors='pt')['input_ids'].to(device)
 output = model.generate(input_ids, max_new_tokens=n_steps, do_sample=False)
 print(tokenizer.decode(output[0]))
+
+max_length = 128
+input_text = """In a shocking finding, scientist discovered \
+a herd of unicorns living in a remote, previously unexplored \
+valley, in the Andes Mountains. Even more surprising to the \
+researchers was the fact that the unicorns spoke perfect English.\n\n
+"""
+input_ids = tokenizer(input_text, return_tensors='pt')['input_ids'].to(device)
+output_greedy = model.generate(input_ids, max_length=max_length, do_sample=False)
+print(tokenizer.decode(output_greedy[0]))
+
+res_point = """
+the main backwards with greedy search decoding : it tends to produce repetitive output sequence, 
+which is certainly undesirable in a news article.
+--- It's  a common problem with greedy search algorithims
+"""
+
+# ----------------------------------
+# 二、Beam Search Decoding
+# ----------------------------------
+
+def log_probs_from_logits(logits, labels):
+    logp = F.log_softmax(logits, dim=-1)
+    logp_label = torch.gather(logp, 2, labels.unsqueeze(2)).squeeze(-1)
+    return logp_label
+
+
+@torch.no_grad()
+def sequence_logprob(model, labels, input_len=0):
+    output = model(labels)
+    log_probs = log_probs_from_logits(
+        output.logits[:, :-1, :], labels[:, 1:] # start 2nd
+    )
+    seq_log_prob = torch.sum(log_probs[:, input_len:])
+    return seq_log_prob
+
+
+logp_org = sequence_logprob(model, output_greedy, input_len=len(input_ids[0]))
+print(tokenizer.decode(output_greedy[0]))
+print(f'log_prob: {logp_org:.2f}')
+
+output_beam = model.generate(input_ids, max_length=max_length, num_beams=5, do_sample=False) # no_repeat_ngram_size=2)
+logp = sequence_logprob(model, output_beam, input_len=len(input_ids[0]))
+print(tokenizer.decode(output_beam[0]))
+print(f'log_prob: {logp:.2f}')
+
+
+point_res = """
+no_repeat_ngram_size parameter that tracks which n-grams have been seen 
+and sets the next token probability to zero if it would produce a previously seen n-gram    
+"""
+
+# ----------------------------------
+# 三、Sampling Method  exp(Z/T) / \sum exp(Z/T)
+# T 
+# - T<1: the distribution becomes peaked around the origin and the rare tokens are suppressed.
+# - T>1: the distribution flattens out and each token becomes equally likely
+# ----------------------------------
+output_temp = model.generate(input_ids, max_length=max_length, do_sample=True, temperature=0.5, top_k=0)
+
+# ----------------------------------
+# 四、 TopK and Nucleus Sampling
+# Top-k and nucleus (top-p) sampling: 
+#   the basic idea is to restrict the number of possible
+#   tokens we can sample from at each timestep.
+# - TopK: avoid the low-probability choices by only sampling from the k tokens with the highest probability
+# - TopP: dynamic cut 
+# - TopK + TopP: choosing tokens with a probability mass of 90%, from a pool of at most 50 tokens.
+# ----------------------------------
+output_topk = model.generate(input_ids, max_length=max_length, do_sample=True, top_k=50)
+print(tokenizer.decode(output_topk[0]))
+
+
+output_topk = model.generate(input_ids, max_length=max_length, do_sample=True, top_p=0.9)
+print(tokenizer.decode(output_topk[0]))
+
+output_topk = model.generate(input_ids, max_length=max_length, do_sample=True, top_k=50, top_p=0.9)
+print(tokenizer.decode(output_topk[0]))
+
+
