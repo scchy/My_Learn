@@ -109,7 +109,71 @@ ceval-computer_network                          db9ce2     accuracy       gen   
 
 使用 OpenCompass 评测 InternLM2-Chat-7B 模型使用 LMDeploy 0.2.0 部署后在 C-Eval 数据集上的性能
 
+1. `lmdeploy`安装
+```shell
+pip install packaging
+# 使用 flash_attn 的预编译包解决安装过慢问题
+pip install /root/share/wheels/flash_attn-2.4.2+cu118torch2.0cxx11abiTRUE-cp310-cp310-linux_x86_64.whl
+pip install 'lmdeploy[all]==0.2.0'
 
+# check
+pip list | grep lmdeploy
+# lmdeploy                      0.2.0
 
+# 查看支持模型
+lmdeploy list | grep internlm
+spt="
+internlm
+internlm-20b
+internlm-chat
+internlm-chat-20b
+internlm-chat-7b
+internlm-chat-7b-8k
+internlm2-20b
+internlm2-7b
+internlm2-chat-20b
+internlm2-chat-7b
+"
+```
+2. 模型转换 -> `lmdeploy TurboMind`
+```shell
+model_path=/root/opencompass/InternLM/Shanghai_AI_Laboratory/internlm2-chat-7b
+dst_path=/root/opencompass/internlm2_chat_7b_workspace
 
+# 采用离线转换
+lmdeploy convert internlm2-chat-7b  ${model_path} --dst-path ${dst_path}
+```
+3. TurboMind推理+API服务: `api_server` -> `api_client` -> `windows`端口映射
+```shell
+cd /root/opencompass
+# --max-seq-len 2048 ->  session_len = 2048
+# --max-out-len 16   
+# --batch-size 4     -> max_batch_size = 4
+vi /root/opencompass/internlm2_chat_7b_workspace/triton_models/weights/config.ini
+# instance_num == batch_size
+lmdeploy serve api_server ./internlm2_chat_7b_workspace \
+    --server_name 0.0.0.0 \
+    --server_port 23333 \
+    --instance_num 4 \
+    --tp 1
+
+# 1- 服务器-新窗口
+lmdeploy serve api_client http://localhost:23333
+# 2- windows-shell 上打开
+ssh -CNg -L 23333:127.0.0.1:23333 root@ssh.intern-ai.org.cn -p 34094
+```
+4. C-Eval评测
+
+```shell
+python run.py --datasets ceval_gen \
+--hf-path ${model_path} \
+--tokenizer-path ${model_path} \
+--tokenizer-kwargs padding_side='left' truncation='left' trust_remote_code=True \
+--model-kwargs device_map='auto' trust_remote_code=True \
+--max-seq-len 2048 \
+--max-out-len 16 \
+--batch-size 4  \
+--num-gpus 1  \
+--debug
+```
 
