@@ -143,37 +143,67 @@ dst_path=/root/opencompass/internlm2_chat_7b_workspace
 # 采用离线转换
 lmdeploy convert internlm2-chat-7b  ${model_path} --dst-path ${dst_path}
 ```
-3. TurboMind推理+API服务: `api_server` -> `api_client` -> `windows`端口映射
+3. 配置模型 
+   - 修改配置 `vi /root/opencompass/internlm2_chat_7b_workspace/triton_models/weights/config.ini`
 ```shell
-cd /root/opencompass
-# --max-seq-len 2048 ->  session_len = 2048
-# --max-out-len 16   
-# --batch-size 4     -> max_batch_size = 4
-vi /root/opencompass/internlm2_chat_7b_workspace/triton_models/weights/config.ini
-# instance_num == batch_size
-lmdeploy serve api_server ./internlm2_chat_7b_workspace \
-    --server_name 0.0.0.0 \
-    --server_port 23333 \
-    --instance_num 4 \
-    --tp 1
-
-# 1- 服务器-新窗口
-lmdeploy serve api_client http://localhost:23333
-# 2- windows-shell 上打开
-ssh -CNg -L 23333:127.0.0.1:23333 root@ssh.intern-ai.org.cn -p 34094
-```
-4. C-Eval评测
-
-```shell
-python run.py --datasets ceval_gen \
---hf-path ${model_path} \
---tokenizer-path ${model_path} \
---tokenizer-kwargs padding_side='left' truncation='left' trust_remote_code=True \
---model-kwargs device_map='auto' trust_remote_code=True \
---max-seq-len 2048 \
+--max-seq-len 2048 --> session_len = 2048
 --max-out-len 16 \
---batch-size 4  \
---num-gpus 1  \
---debug
+--batch-size 4   --> max_batch_size = 4
+``` 
+   - 配置模型: 在`/root/opencompass/opencompass/configs/`下增加py文件
+```python
+# /root/opencompass/opencompass/configs/eval_internlm2_chat_7b_turbomind.py
+from opencompass.models.turbomind import TurboMindModel
+from mmengine.config import read_base
+from opencompass.models.turbomind import TurboMindModel
+
+with read_base():
+    # ceval_gen
+    from .ceval_gen_5f30c7 import ceval_datasets 
+    # and output the results in a choosen format
+    from .summarizers.medium import summarizer
+
+datasets = [*ceval_datasets]
+
+
+meta_template = dict(
+    round=[
+        dict(role='HUMAN', begin='<|User|>:', end='\n'),
+        dict(role='BOT', begin='<|Bot|>:', end='<eoa>\n', generate=True),
+    ],
+    eos_token_id=103028)
+
+
+model_path = '/root/opencompass/internlm2_chat_7b_workspace/triton_models'
+models = [
+    dict(
+        type=TurboMindModel,
+        abbr='internlm2-chat-7b-turbomind',
+        path=model_path,
+        tis_addr='0.0.0.0:33337',
+        max_out_len=16,
+        max_seq_len=2048,
+        batch_size=4,
+        meta_template=meta_template,
+        run_cfg=dict(num_gpus=1, num_procs=1),
+    )
+]
+```
+1. C-Eval评测 
+   - 开启服务 todo: 服务无法访问的问题
+```shell
+lmdeploy serve api_server ./internlm2_chat_7b_workspace \
+--model-name internlm2-chat-7b \
+--backend turbomind \
+--server-name 0.0.0.0 --server-port 33337 \
+--max-batch-size 4 \
+--tp 1
+```
+   - 开始评测`nohup sh eval_new.sh > __eval_new.log &`
+
+```shell
+# eval_new.sh
+cd /root/opencompass/opencompass
+python run.py configs/eval_internlm2_chat_7b_turbomind.py --debug
 ```
 

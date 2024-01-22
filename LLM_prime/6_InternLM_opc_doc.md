@@ -92,8 +92,10 @@ pip install -e .
    - `configs/datasets/collections`收录了各种数据集集合，方便进行综合评估
      - OpenCompass一般用`configs/datasets/collections/base_medium.py`进行全面的模型测试
      - `python run.py --models hf_llama_7b --datasets base_medium`
-   - 模型需要在`configs/models/opt` 下进行创建
-     - 参考`configs/models/opt/hf_opt_350m.py`
+   - 模型
+     - 在`configs/models/opt` 下进行创建：参考`configs/models/opt/hf_opt_350m.py`
+     - 也可以在`eval_demo.py`中直接创建，参考`opencompass/configs/eval_internlm_chat_7b_turbomind.py`
+  
 
 ```python
 # hf_opt_350m.py
