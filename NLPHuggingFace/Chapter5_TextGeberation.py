@@ -8,13 +8,12 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm.auto import tqdm
 import pandas as pd
-
+import os 
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
 # ----------------------------------
 # 一、贪婪搜索Decoding
 # ----------------------------------
-
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model_name = 'gpt2' # 'gpt2-xl' 会更大
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -33,11 +32,12 @@ with torch.no_grad():
         iter_dict['Input'] = tokenizer.decode(input_ids[0])
         output = model(input_ids=input_ids)
         next_token_logits = output.logits[0, -1, :]
+        print(f'Step - {step} output.logits.shape=', output.logits.shape)
         next_token_probs = torch.softmax(next_token_logits, dim=-1)
         sorted_ids = torch.argsort(next_token_probs, dim=-1, descending=True)
         for idx in range(choice_per_step):
             token_id = sorted_ids[idx]
-            token_prob = next_token_probs[token_id].cpu().numpy()
+            token_prob = next_token_probs[token_id].detach().cpu().numpy()
             token_choice = (
                 f'{tokenizer.decode(token_id)} ({100 * token_prob:.2f}%)'
             )
@@ -45,7 +45,6 @@ with torch.no_grad():
         
         input_ids = torch.cat([input_ids, sorted_ids[None, 0, None]], dim=-1)
         iter_list.append(iter_dict)
-        
 
 pd.DataFrame(iter_list)
 
