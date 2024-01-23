@@ -200,7 +200,6 @@ lmdeploy serve api_server ./internlm2_chat_7b_workspace \
 --tp 1
 ```
    - 开始评测`nohup sh eval_new.sh > __eval_new.log &`
-
 ```shell
 # eval_new.sh
 cd /root/opencompass/opencompass

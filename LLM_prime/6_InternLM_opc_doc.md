@@ -1,5 +1,6 @@
 
 reference: [https://github.com/InternLM/tutorial/blob/main/opencompass/opencompass_tutorial.md](https://github.com/InternLM/tutorial/blob/main/opencompass/opencompass_tutorial.md)
+reference: [OpenCompass 大模型评测](https://www.bilibili.com/video/BV1Gg4y1U7uc/?vd_source=f209dda877a0d7be7d5309f93b340d6f)
 
 # 一、评估的现状
 
@@ -80,7 +81,7 @@ pip install -e .
 |--batch-size  | 4  | 批量大小 |
 |--num-gpus | 1  | 运行模型所需的 GPU 数量 |
 |--debug    | | 该模式下任务将按顺序执行，并实时打印输出 |
-
+|--reuse    | latest | 继续之前的评测 |
 
 ## 3.2 自定义启动评测
 
@@ -88,14 +89,11 @@ pip install -e .
 还可以通过直接传递配置文件进行评测`python run.py configs/eval_demo.py`。
 
 1. `configs/eval_demo.py`通过 继承机制 引入所需的数据集和模型配置
-   - 数据集配置通常有两种类型：'ppl' 和 'gen'，分别指示使用的评估方法。其中 **`ppl` 表示辨别性评估**，**`gen` 表示生成性评估**。
-   - `configs/datasets/collections`收录了各种数据集集合，方便进行综合评估
-     - OpenCompass一般用`configs/datasets/collections/base_medium.py`进行全面的模型测试
-     - `python run.py --models hf_llama_7b --datasets base_medium`
-   - 模型
-     - 在`configs/models/opt` 下进行创建：参考`configs/models/opt/hf_opt_350m.py`
-     - 也可以在`eval_demo.py`中直接创建，参考`opencompass/configs/eval_internlm_chat_7b_turbomind.py`
-  
+   - **数据**：'ppl' 和 'gen'，分别指示使用的评估方法。其中 **`ppl` 表示辨别性评估**，**`gen` 表示生成性评估**。
+     - `configs/datasets`收录了各种数据集集合，方便进行综合评估
+   - **模型**`configs/models`配置了各种模型
+     - 可以在下面新建模型的py文件
+   - 也可以在`eval_xxx.py`中直接引入`dataset`和创建模型，参考`opencompass/configs/eval_internlm_chat_7b_turbomind.py`
 
 ```python
 # hf_opt_350m.py
@@ -123,8 +121,34 @@ opt350m = dict(
 )
 models = [opt350m]
 ```
+## 3.3 主观评测
+会在inference之后再调用一些模型进行评估
+```python
+eval = dict(
+    partitioner=dict(
+        type=SubjectiveNaivePartitioner,
+        mode='all',  # 新参数
+    ),
+    runner=dict(
+        type=LocalRunner,
+        max_num_workers=2,  # 支持并行比较
+        task=dict(
+            type=SubjectiveEvalTask,  # 新 task，用来读入一对 model 的输入
+            judge_cfg=dict(
+                abbr='GPT4',
+                type=OpenAI,
+                path='gpt-4-0613',
+                key='ENV',
+                meta_template=api_meta_template,
+                query_per_second=1,
+                max_out_len=2048,
+                max_seq_len=2048,
+                batch_size=2),
+        )),
+)
+```
 
-## 3.3 可视化评估结果
+## 3.4 可视化评估结果
 
 结果位置tree
 ```text

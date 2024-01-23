@@ -1,0 +1,5 @@
+tqdm
+openxlab
+huggingface_hub==0.20.3
+modelscope
+transformers==4.34.0
