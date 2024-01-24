@@ -22,5 +22,7 @@ ZhipuAI/chatglm3-6b-base    THUDM/chatglm3-6b-base
 
 yi_34b
 01ai/Yi-6B   01-ai/Yi-6B  
-qwen_7b_chat
-qwen_7b
+Qwen/Qwen-7B-Chat
+Qwen/Qwen-7B
+
+

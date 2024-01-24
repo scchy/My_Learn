@@ -192,7 +192,9 @@ models = [
 1. C-Eval评测 
    - 开启服务 todo: 服务无法访问的问题
 ```shell
-lmdeploy serve api_server ./internlm2_chat_7b_workspace \
+lmdeploy serve triton_client "localhost:33337"
+
+./internlm2_chat_7b_workspace \
 --model-name internlm2-chat-7b \
 --backend turbomind \
 --server-name 0.0.0.0 --server-port 33337 \
