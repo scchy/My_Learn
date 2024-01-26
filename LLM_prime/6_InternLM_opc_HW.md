@@ -192,14 +192,10 @@ models = [
 1. C-Eval评测 
    - 开启服务 todo: 服务无法访问的问题
 ```shell
-lmdeploy serve triton_client "localhost:33337"
+sh internlm2_chat_7b_workspace/service_docker_up.sh 
 
-./internlm2_chat_7b_workspace \
---model-name internlm2-chat-7b \
---backend turbomind \
---server-name 0.0.0.0 --server-port 33337 \
---max-batch-size 4 \
---tp 1
+lmdeploy serve triton_client "0.0.0.0:33337"
+
 ```
    - 开始评测`nohup sh eval_new.sh > __eval_new.log &`
 ```shell

@@ -4,66 +4,18 @@
 # Func: 模型拉取到本地
 # ===========================================================================================
 import os
-import re
 from tqdm.auto import tqdm
 from openxlab.model import download as ox_download
 from modelscope.hub.snapshot_download import snapshot_download
-from huggingface_hub import snapshot_download as hf_snapshot_download
 from modelscope.hub.api import HubApi, ModelScopeConfig
 from os.path import getsize as p_getsize
 from os.path import join as p_join
 import threading
 import time
-import inspect
-import ctypes
+from download_utils import stop_thread, _split_repo, get_hf_cache_files, get_model_info, TOKEN
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+CUR_DIR = os.path.dirname(__file__)
 
-# father_p = '/home/scc/sccWork/openProject/xtuner019/xtuner/xtuner/configs' 
-# need_models = [os.listdir(f'{father_p}/{i}') for i in os.listdir(father_p) if '__' not in i]
-# need_models_f = []
-# for i in need_models:
-#     need_models_f.extend(i)
-# need_models_f
-
-def get_hf_cache_files(folder_path):
-    all_files = []
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            file_tt = p_join(root, file)
-            if os.path.isfile(file_tt) and '.incomplete' in file:
-                all_files.append(file_tt)
-    return all_files
-
-
-def _split_repo(model_repo) -> (str, str):
-    """
-    Split a full repository name into two separate strings: the username and the repository name.
-    """
-    # username/repository format check
-    pattern = r'.+/.+'
-    if not re.match(pattern, model_repo):
-        raise ValueError("The input string must be in the format 'username/model_repo'")
-
-    values = model_repo.split('/')
-    return values[0], values[1]
- 
-
-def _async_raise(tid, exctype):
-    """Raises an exception in the threads with id tid"""
-    if not inspect.isclass(exctype):
-        raise TypeError("Only types can be raised (not instances)")
-    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(tid), ctypes.py_object(exctype))
-    if res == 0:
-        raise ValueError("invalid thread id")
-    elif res != 1:
-        # """if it returns a number greater than one, you're in trouble,
-        # and you should call it again with exc=NULL to revert the effect"""
-        ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
-        raise SystemError("PyThreadState_SetAsyncExc failed")
-
-
-def stop_thread(thread):
-    _async_raise(thread.ident, SystemExit)
 
 class xtunerModelDownload():
     def __init__(self, model_name, out_path, tqdm_class=tqdm, progress_sleep=1) -> None:
@@ -74,6 +26,8 @@ class xtunerModelDownload():
         self.out_path = out_path
         self.final_out_path = p_join(out_path, f'{self.username}_{self.repository}')
         self.mid_download_dir = self.final_out_path
+        self._t_handle_dl = None
+        self._t_handle_gp = None
         self.remove_and_create()
         self.get_download_info()
 
@@ -103,10 +57,11 @@ class xtunerModelDownload():
         return sp_model_name
 
     def get_download_info(self):
+        # 优先modelscope查看
         try:
             self.total_MB, self.total_file_nums = self._get_download_info()
         except Exception as e:
-            self.total_MB = self.total_file_nums = None
+            self.total_MB, self.total_file_nums = get_model_info(self.model_name)
     
     def _get_download_info(self):
         _api = HubApi()
@@ -152,10 +107,12 @@ class xtunerModelDownload():
         self.__remove_mid_files()
         self.__remove_final_files()
         self.__check_create_dir()
+        self.mid_download_dir = self.final_out_path
     
     def auto_download(self, tp=None):
         self._t_download(self.loop_download, tp)
         self._t_start()
+        return self.final_out_path
 
     def loop_download(self, tp=None):
         if 'internlm' in self.model_name.lower():
@@ -166,8 +123,11 @@ class xtunerModelDownload():
             loop_list = [self.hf_download, self.modelscope_download, self.openxlab_download]
 
         for download_func in loop_list:
-            download_func()
-            time.sleep(1)
+            try:
+                download_func()
+                time.sleep(1)
+            except Exception as e:
+                pass
             # 执行完检验
             if self._finished_check():
                 print('finished download all model files')
@@ -175,18 +135,18 @@ class xtunerModelDownload():
             self.remove_and_create()
         return
 
-
     def hf_download(self):
-        print('>>>>>>> Start openxlab_download')
+        print('>>>>>>> Start hf_download')
         # 1- mid download local dir
         self.mid_download_dir = self.final_out_path   
         # 2- download 
         os.system(f"""
         export HF_ENDPOINT=https://hf-mirror.com && \
         huggingface-cli download --resume-download {self.model_name} --local-dir-use-symlinks False \
+        --repo-type model \
         --local-dir {self.final_out_path} \
         --cache-dir {self.final_out_path}/cache \
-        --token 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
+        --token {TOKEN}
         """)
         os.system(f'rm -rf {self.final_out_path}/cache')
         return self.final_out_path 
@@ -214,33 +174,30 @@ class xtunerModelDownload():
         ox_download(model_repo=model_name, output=self.final_out_path, cache=False)
         return self.final_out_path 
 
-
     def _finished_check(self):
         """检查是否下载完整数据
         """
-        if self.total_file_nums is not None and os.path.exists(self.final_out_path):
+        no_flag = (self.total_file_nums is not None) or (self.total_file_nums <= 0.01)
+        if no_flag and os.path.exists(self.final_out_path):
             file_same = len([i for i in os.listdir(self.final_out_path) if os.path.isfile(i) ]) == self.total_file_nums
             size_same = sum([p_getsize(p_join(self.final_out_path, i))/ 1024**2
-                         for i in os.listdir(self.final_out_path)])/self.total_MB >= 0.9999
+                         for i in os.listdir(self.final_out_path)])/(self.total_MB + 1e-5) >= 0.9999
             return size_same &  file_same
         return True
     
     def _t_start(self):
-        self._t_handle_pg = threading.Thread(target=self.progress, name='Xprogress', daemon=True)
+        self._t_handle_pg = threading.Thread(target=self.progress, name='X-model-progress', daemon=True)
         self._t_handle_pg.start()
         
     def _t_download(self, d_func, tp):
-        self._t_handle_dl = threading.Thread(target=d_func, args=(tp,) ,name='Xdownload', daemon=True)
+        self._t_handle_dl = threading.Thread(target=d_func, args=(tp,) ,name='X-model-download', daemon=True)
         self._t_handle_dl.start()
 
-    def progress(self):
-        if self.total_MB is None:
-            return 
-        
+    def progress(self):        
         model_scope_cache_dir = p_join(self.out_path, 'temp')
         hf_cache_dir = p_join(self.final_out_path, 'cache')
-        bar_ = self.tqdm_class(total=round(self.total_MB*1024**2, 3), unit='iB', unit_scale=True)
-        bar_.set_description('TotalProgress')
+        self.bar_ = self.tqdm_class(total=round(self.total_MB*1024**2, 3), unit='iB', unit_scale=True)
+        self.bar_.set_description('TotalProgress')
         bf = 0
         while True:
             if self._t_handle_dl is None:
@@ -269,31 +226,43 @@ class xtunerModelDownload():
                 for f in hf_cache_files])
                 cached_mb = (cached_mb1 + cached_mb2 + cached_mb3 + cached_mb4)
             
-            bar_.update(round(cached_mb - bf, 3))
+            self.bar_.update(round(cached_mb - bf, 3))
             bf = cached_mb
-            if cached_mb / self.total_MB / 1024**2 > 99.99:
+            if cached_mb / (self.total_MB + 1e-5) / 1024**2 > 99.99:
                 break
             time.sleep(self.progress_sleep)
-        bar_.close()
+        self.bar_.close()
         return 
 
     def break_download(self):
         # 然后杀死该线程
         # 删除文件
-        print('>>>>>>>>>>>>>>>>> break_download')
-        stop_thread(self._t_handle_dl)
-        print('>>>>>>>>>>>>>>>>> stop_thread(self._t_handle_dl)')
+        if self._t_handle_dl is not None:
+            print('>>>>>>>>>>>>>>>>> break_download')
+            stop_thread(self._t_handle_dl)
+            self._t_handle_dl = None
+            os.system(f'sh {CUR_DIR}/kill_hf.sh model')
+            print('>>>>>>>>>>>>>>>>> stop_thread(self._t_handle_dl)')
 
-        stop_thread(self._t_handle_pg)
-        print('>>>>>>>>>>>>>>>>> stop_thread(self._t_handle_pg)')
+        if self._t_handle_pg is not None:
+            stop_thread(self._t_handle_pg)
+            print('>>>>>>>>>>>>>>>>> stop_thread(self._t_handle_pg)')
+            self._t_handle_pg = None
         self.remove_and_create()
+        try:
+            self.bar_.close()
+        except Exception as e:
+            pass
         return 
-
 
 
 if __name__ == '__main__':
     print(os.getcwd())
-    download_ = xtunerModelDownload('internlm/InternLM-chat-7b', out_path='/home/scc/sccWork/myGitHub/My_Learn/tmp/download')
+    download_ = xtunerModelDownload(
+        'internlm/InternLM-chat-7b', 
+        out_path='/home/scc/sccWork/myGitHub/My_Learn/tmp/download')
+        #'/root/tmp/download')
+    #'/home/scc/sccWork/myGitHub/My_Learn/tmp/download')
     # download_.hf_download() # checked-download & progress
     # download_.openxlab_download() # checked-download & progress
     # download_.modelscope_download() # checked-download & progress
@@ -304,4 +273,3 @@ if __name__ == '__main__':
     # chech finished 
     f_ = download_._finished_check() 
     print(f'_finished_check={f_}')
-
