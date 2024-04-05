@@ -2,3 +2,12 @@
 AIToys/SAMToy/FastSAM
 AIToys/SAMToy/CLIP
 AIToys/SAMToy/area_demo/__pycache__
+AIToys/YoloV8Toy/trainMyData/yoloTrain*
+AIToys/YoloV8Toy/trainMyData/wandb
+AIToys/YoloV8Toy/trainMyData/*.log
+AIToys/YoloV8Toy/trainMyData/runs
+AIToys/YoloV8Toy/trainMyData/*.pt
+AIToys/YoloV8Toy/trainMyData/*.mp4
+
+
+AIToys/YoloV8Toy/verify_env/*.mp4
