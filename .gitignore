@@ -11,3 +11,6 @@ AIToys/YoloV8Toy/trainMyData/*.mp4
 
 
 AIToys/YoloV8Toy/verify_env/*.mp4
+
+deepSpeed/ds_train_learning/cifiar/deepspeed_runs/*
+deepSpeed/ds_train_learning/cifiar/=*
