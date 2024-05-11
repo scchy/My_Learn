@@ -45,15 +45,18 @@ def create_moe_param_groups(model):
 
 
 def get_ds_config(cfg):
+    # https://www.deepspeed.ai/docs/config-json/
     ds_config = {
-        "train_batch_size": 16,
-        "steps_per_print": 2000,
-        "tensorboard": {
+        "train_batch_size": 16, # = train_micro_batch_size_per_gpu * gradient_accumulation_steps * number of GPUs
+        "train_micro_batch_size_per_gpu": 16,
+        "gradient_accumulation_steps": 1, # 梯度累积
+        "steps_per_print": 2000, # logging相关 每 N 个培训步骤打印进度报告
+        "tensorboard": { # tensorboard 相关设置
             "enabled": True,
             "output_path": "deepspeed_runs",
             "job_name": "cifiar10-try"
         },
-        "optimizer":{
+        "optimizer":{ # 优化器相关设置
             'type': 'Adam',
             'params': {
                 "lr": 0.001,
@@ -62,7 +65,7 @@ def get_ds_config(cfg):
                 'weight_decay': 3e-7
             }
         },
-        "scheduler": {
+        "scheduler": { # 学习率相关设置
             'type': 'WarmupLR',
             'params': {
                 'warmup_min_lr': 0,
@@ -70,34 +73,39 @@ def get_ds_config(cfg):
                 'warmup_num_steps': 1000
             }
         },
-        "gradient_clipping": 1.0,
-        'prescale_gradients': False,
+        "gradient_clipping": 1.0, # 梯度裁剪
+        'prescale_gradients': False, # 在进行 allreduce 之前缩放梯度
         'bf16': {'enabled': cfg.dtype == 'bf16'},
         "fp16": {
                     "enabled": cfg.dtype == "fp16",
                     "fp16_master_weights_and_grads": False,
-                    "loss_scale": 0,
+                    "loss_scale": 0, # the loss scaling value for FP16 training
                     "loss_scale_window": 500,
-                    # "hysteresis": 2,
-                    "min_loss_scale": 1,
-                    "initial_scale_power": 15,
+                    "hysteresis": 2, # the delay shift in dynamic loss scaling.
+                    "min_loss_scale": 1, # the minimum dynamic loss scale value.
+                    "initial_scale_power": 15, # 2^initial_scale_power the power of the initial dynamic loss scale valu
                 },
-        "wall_clock_breakdown": False,
-        "zero_optimization": {
+        "wall_clock_breakdown": False, # 为  forward/backward/update 训练阶段的延迟计时
+        # 
+        "zero_optimization": { # ZeRO（Zero Redundancy Optimizer） memory optimizations
             "stage": cfg.stage,
-            "allgather_partitions": True,
-            "reduce_scatter": True,
-            "allgather_bucket_size": 50000000,
-            "reduce_bucket_size": 50000000,
-            "overlap_comm": True,
-            "contiguous_gradients": True,
-            "cpu_offload": False
+            "allgather_partitions": True, # 以便在每一步结束时从所有 GPU 收集更新参数
+            "reduce_scatter": True, # 使用 reduce 或 reduce scatter 而不是 allreduce 来平均梯度
+            "allgather_bucket_size": 5e8, # 一次全采集的元素数量。限制大尺寸模型全收集所需的内存
+            "reduce_bucket_size": 5e8, # 一次还原/全还原的元素数量。限制大型模型的 allgather 内存需求
+            "overlap_comm": True, # 尝试将梯度缩减与逆向计算相重叠
+            "contiguous_gradients": True, # 在生成梯度时将其复制到连续的缓冲区中。避免在后向传递过程中出现内存碎片
+            "cpu_offload": False # 将优化器内存和计算卸载到 CPU
         }
     }
     return ds_config
 
 
 class MLP(nn.Module):
+    """
+    [`Mixture of Experts`（专家混和架构）](https://deepspeed.readthedocs.io/en/stable/moe.html)
+    [Mixture-of-Experts (MoE) 经典论文一览](https://zhuanlan.zhihu.com/p/542465517)
+    """
     def __init__(self, cfg):
         super().__init__()
         self.extra_feat = nn.Sequential(
@@ -124,13 +132,13 @@ class MLP(nn.Module):
                 self.moe_layer_list.append(
                     deepspeed.moe.layer.MoE(
                         hidden_size=84,
-                        expert=expert,
-                        num_expert=n_e,
-                        ep_size=cfg.ep_word_size,
-                        use_residual=cfg.mlp_type == 'residual',
-                        k=cfg.top_k,
-                        min_capacity=cfg.min_capacity,
-                        nosiy_gate_policy=cfg.nosiy_gate_policy,
+                        expert=expert,  # 专家模型
+                        num_expert=n_e, # default=1, 每层专家总数
+                        ep_size=cfg.ep_word_size, #  default=1,
+                        use_residual=cfg.mlp_type == 'residual', 
+                        k=cfg.top_k, # default=1,  only supports k=1 or k=2. 
+                        min_capacity=cfg.min_capacity, # default=4, 每个专家最小容量
+                        nosiy_gate_policy=cfg.nosiy_gate_policy, 
                     )
                 )
             self.moe_layer_list = nn.ModuleList(self.moe_layer_list)
@@ -249,12 +257,12 @@ def main(cfg):
     # 2) Distributed data loader
     # 3) DeepSpeed optimizer
     ds_config = get_ds_config(cfg)
-    model_engine, opt, tr_loader, _ = deepspeed.initialize(
-        args=cfg,
-        model=net,
-        model_parameters=params_grad,
-        training_data=tr_set,
-        config=ds_config
+    model_engine, opt, tr_loader, _lr_scheduler = deepspeed.initialize(
+        args=cfg,  # 其中包含 local_rank 和 deepspeed_config 字段。如果传递了 config，则此对象为可选项。
+        model=net, # torch.nn.Module
+        model_parameters=params_grad, # 开启梯度下降的参数
+        training_data=tr_set, # torch.utils.data.Dataset
+        config=ds_config #  Instead of requiring args.deepspeed_config
     )
 
     # Get the local device name 
