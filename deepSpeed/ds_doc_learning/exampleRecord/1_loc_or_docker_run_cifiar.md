@@ -104,6 +104,12 @@ RUN echo "Done"
 ```shell
 sudo docker build -t ds_env_container . --network=host
 sudo docker images
+
+res="""
+REPOSITORY                TAG       IMAGE ID       CREATED       SIZE
+ds_env_container          latest    9149b06c79c8   1 hours ago   17.4GB
+ultralytics/ultralytics   latest    9d605fba39ec   6 weeks ago   13.8GB
+"""
 ```
 
 # 2 cifiar10 deepspeed训练代码解析
