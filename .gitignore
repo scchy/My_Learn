@@ -17,3 +17,4 @@ deepSpeed/ds_train_learning/cifiar/=*
 
 course_cpp_ternsorrt/*/build
 course_cpp_ternsorrt/course8_faceNet/facenet
+course_cpp_ternsorrt/course8_faceDet/facenet
