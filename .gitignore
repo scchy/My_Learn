@@ -14,3 +14,6 @@ AIToys/YoloV8Toy/verify_env/*.mp4
 
 deepSpeed/ds_train_learning/cifiar/deepspeed_runs/*
 deepSpeed/ds_train_learning/cifiar/=*
+
+course_cpp_ternsorrt/*/build
+course_cpp_ternsorrt/course8_faceNet/facenet
