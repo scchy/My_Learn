@@ -17,7 +17,7 @@ sudo docker run -it --ipc=host \
     # -p 1936:1935 -p 8556:8554 \
 
 
-
+# ************************************************************************************
 # Docker环境内
 cd /app/facenet
 # 下载检测模型
@@ -38,6 +38,6 @@ cd ..
 cmake -B build .
 cmake --build build
 ./build/facedet_test --model facenet/saved.engine --img imges/test_face.jpg
-
+# ************************************************************************************
 
 
