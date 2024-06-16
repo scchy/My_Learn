@@ -67,26 +67,34 @@ int main(int argc, char **argv)
     double fps = 25;
     std::cout << "width: " << width << ", height: " << height << ", fps: " << fps << std::endl;
 
-    streamer::Streamer streamer;
-    streamer::StreamerConfig streamer_config(
-        width, height, width, height,
-        fps, 500000,
-        "main", "rtmp://localhost/live"
-    );
-    streamer.init(streamer_config);
+    // -> mp4
+    cv::VideoWriter writer;
+    int codec = cv::VideoWriter::fourcc('H','2','6','4');
+    writer.open("output.mp4", codec, fps, cv::Size(width, height), true);
+    if (!writer.isOpened()) {
+        std::cerr << "Error: Could not open the output video file for writing." << std::endl;
+        return -1;
+    }
+    // streamer::Streamer streamer;
+    // streamer::StreamerConfig streamer_config(
+    //     width, height, width, height,
+    //     fps, 500000,
+    //     "main", "rtmp://localhost/live"
+    // );
+    // streamer.init(streamer_config);
     cv::Mat frame;
     while(cap.read(frame)){
         // FPS start time
         auto start = std::chrono::high_resolution_clock::now();
         // detect face
         auto faces = facedet_model.run(frame);
+        std::cout << "after facedet_model.run" << std::endl;
         std::vector<DetWithAttr> dets;
         for(auto &face: faces){
             cv::Mat crop_face = frame(getRect(
-                frame, face, facenet::kInputH, facenet::kInputW
+                frame, face, facedet::kInputH, facedet::kInputW
             ));
             auto name = facenet.run(crop_face);
-
             auto gender_label = gender_model.run(crop_face, attribute::GENDER);
             auto age_label = age_model.run(crop_face, attribute::AGE);
             auto emotion_label = emotion_model.run(crop_face, attribute::EMOTION);
@@ -104,8 +112,11 @@ int main(int argc, char **argv)
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.f;
 
         draw(frame, elapsed, dets, facedet::kInputH, facedet::kInputW);
-        streamer.stream_frame(frame.data);
+        // streamer.stream_frame(frame.data);
+        writer.write(frame);
     }
+
+    writer.release();
     return 0;
 }
 

@@ -4,7 +4,8 @@ cd ~/sccWork/myGitHub/My_Learn/course_cpp_ternsorrt/course8_nanoApp
 
 # OR sudo docker start app_proj
 #    &&     sudo docker exec -it app_proj /bin/bash  
-sudo docker run -it -p 1936:1935 \
+sudo docker run -it \
+    -p 1936:1935  -p 8556:8554 \
     --gpus all -it  \
     --name app_proj \
     -v `pwd`:/app \
@@ -72,7 +73,9 @@ python simplify.py /app/backup_onnx/emotion.onnx
 # 构建
 export PATH=$PATH:/usr/local/cuda/bin
 
-# local mp4 -> 
+# update ffmpeg
+apt update
+apt upgrade ffmpeg
 
 # 测试
 ./build/stream \
@@ -83,5 +86,6 @@ export PATH=$PATH:/usr/local/cuda/bin
 --att_emotion ./backup_onnx/emotion_sim.engine \
 --att_mask ./backup_onnx/mask_sim.engine \
 --faces ./face_list.txt \
---vid rtsp://localhost:8554/live1.sdp
+--vid ./rtmp_server/test.mp4
+# rtsp://localhost:8554/live1.sdp
 
