@@ -74,7 +74,6 @@ cmake --build build
 
 ./build/attribute_test --model /app/export_onnx/emotion_sim.engine --type emotion --img ./images/4.emotion/sad.jpg
 
-# **************************************************************************************************************
-# App
+
 
 
