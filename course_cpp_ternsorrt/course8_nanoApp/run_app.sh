@@ -1,6 +1,6 @@
 # **************************************************************************************************************
 # App
-cd ~/sccWork/myGitHub/My_Learn/course_cpp_ternsorrt/course8_nanoApp\
+cd ~/sccWork/myGitHub/My_Learn/course_cpp_ternsorrt/course8_nanoApp
 
 # OR sudo docker start app_proj
 #    &&     sudo docker exec -it app_proj /bin/bash  
@@ -72,13 +72,16 @@ python simplify.py /app/backup_onnx/emotion.onnx
 # 构建
 export PATH=$PATH:/usr/local/cuda/bin
 
+# local mp4 -> 
+
 # 测试
 ./build/stream \
---facedet /app/TAO/detect.engine \
---facenet /app/backup_onnx/facenet_sim.engine \
---att_gender /app/backup_onnx/gender_sim.engine \
---att_age /app/backup_onnx/age_sim.engine \
---att_emotion /app/backup_onnx/emotion_sim.engine \
---att_mask /app/backup_onnx/mask_sim.engine \
---faces /app/face_list.txt \
---vid  /app/rtmp_serer/test.mp4
+--facedet ./TAO/detect.engine \
+--facenet ./backup_onnx/facenet_sim.engine \
+--att_gender ./backup_onnx/gender_sim.engine \
+--att_age ./backup_onnx/age_sim.engine \
+--att_emotion ./backup_onnx/emotion_sim.engine \
+--att_mask ./backup_onnx/mask_sim.engine \
+--faces ./face_list.txt \
+--vid rtsp://localhost:8554/live1.sdp
+
