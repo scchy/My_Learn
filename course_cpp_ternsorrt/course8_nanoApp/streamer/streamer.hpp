@@ -64,14 +64,12 @@ public:
         data = nullptr;
         frame = av_frame_alloc();
 
-        int sz = av_image_get_buffer_size(pix_fmt, width, height, align_frame_buffer);
+        int sz =  av_image_get_buffer_size(pix_fmt, width, height, align_frame_buffer);
         int ret = posix_memalign(reinterpret_cast<void**>(&data), align_frame_buffer, sz);
-        av_image_fill_arrays(
-            frame->data, frame->linesize, data, pix_fmt, width, height, align_frame_buffer
-        );
 
+        av_image_fill_arrays(frame->data, frame->linesize, data, pix_fmt, width, height, align_frame_buffer);
         frame->format = pix_fmt;
-        frame->width = width;
+        frame->width  = width;
         frame->height = height;
 
         return ret;
@@ -111,14 +109,13 @@ struct StreamerConfig{
         src_width = 0;
         src_height = 0;
         fps = 0;
-        bitrate = 0;    
+        bitrate = 0;
     }
 
-    StreamerConfig(
-        int source_width, int source_height, int stream_width, int stream_height, int stream_fps, int stream_bitrate,
-        const std::string &stream_profile,
-        const std::string &stream_server
-    ){
+    StreamerConfig(int source_width, int source_height, int stream_width, int stream_height, int stream_fps, int stream_bitrate,
+                   const std::string &stream_profile,
+                   const std::string &stream_server)
+    {
         src_width = source_width;
         src_height = source_height;
         dst_width = stream_width;
@@ -131,8 +128,7 @@ struct StreamerConfig{
 };
 
 
-class Streamer 
-{
+class Streamer{
     bool network_init_ok;
     bool rtmp_server_conn;
     bool init_ok;
@@ -160,7 +156,5 @@ public:
     void stream_frame(const uint8_t *data);
     void stream_frame(const uint8_t *data, int64_t frame_duration);
 };
-
-}
+} // namespace streamer
 #endif
-

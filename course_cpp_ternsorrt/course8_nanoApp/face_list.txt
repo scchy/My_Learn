@@ -3,3 +3,4 @@
 /app/crop/huge/3.jpg
 /app/crop/huge/2.jpg
 /app/crop/huge/胡歌.jpg
+/app/crop/scc/scc.jpg

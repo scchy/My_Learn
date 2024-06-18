@@ -9,6 +9,7 @@ sudo docker run -it \
     --gpus all -it  \
     --name app_proj \
     -v `pwd`:/app \
+    --device=/dev/video0:/dev/video0 \
     trt_env
 
 # -------------------------------------------------------
@@ -73,9 +74,19 @@ python simplify.py /app/backup_onnx/emotion.onnx
 # 构建
 export PATH=$PATH:/usr/local/cuda/bin
 
-# update ffmpeg
-apt update
-apt upgrade ffmpeg
+# install ffmpeg
+apt install ffmpeg
+
+# host ************************* VLC
+# reference: https://zhuanlan.zhihu.com/p/669695580?utm_id=0
+# apt install vlc
+sudo apt-get install flatpak
+sudo apt-get install gnome
+sudo apt install gnome-software-plugin-flatpak
+sudo  flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+sudo reboot
+flatpak install vlc
+# host *************************
 
 # 测试
 ./build/stream \
@@ -86,6 +97,12 @@ apt upgrade ffmpeg
 --att_emotion ./backup_onnx/emotion_sim.engine \
 --att_mask ./backup_onnx/mask_sim.engine \
 --faces ./face_list.txt \
---vid ./rtmp_server/test.mp4
-# rtsp://localhost:8554/live1.sdp
+--vid  rtsp://localhost:8554/camera
+
+# --vid rtsp://localhost:8554/live1.sdp
+# --vid ./rtmp_server/test.mp4
+
+# host VLC
+#   rtsp://localhost:8555/live1.sdp
+#   rtmp://localhost:1936/live
 

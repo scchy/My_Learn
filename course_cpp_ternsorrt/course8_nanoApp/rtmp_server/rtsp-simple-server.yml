@@ -77,9 +77,9 @@ rtspAddress: :8554
 # Address of the TCP/TLS/RTSPS listener. This is needed only when encryption is "strict" or "optional".
 rtspsAddress: :8322
 # Address of the UDP/RTP listener. This is needed only when "udp" is in protocols.
-rtpAddress: :8000
+rtpAddress: :8898 #8000
 # Address of the UDP/RTCP listener. This is needed only when "udp" is in protocols.
-rtcpAddress: :8001
+rtcpAddress: :8899 ##8001
 # IP range of all UDP-multicast listeners. This is needed only when "multicast" is in protocols.
 multicastIPRange: 224.1.0.0/16
 # Port of all UDP-multicast/RTP listeners. This is needed only when "multicast" is in protocols.

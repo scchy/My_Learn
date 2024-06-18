@@ -22,6 +22,7 @@ course_cpp_ternsorrt/*/*/*.onnx
 course_cpp_ternsorrt/*/*/*.mp4
 course_cpp_ternsorrt/*/*/*.log
 course_cpp_ternsorrt/*/*.mp4
+course_cpp_ternsorrt/*/*/*/*.jpg
 course_cpp_ternsorrt/course8_faceNet/*/__pycache__
 course_cpp_ternsorrt/course8_faceNet/*/*.onnx
 course_cpp_ternsorrt/course8_faceDet/facenet

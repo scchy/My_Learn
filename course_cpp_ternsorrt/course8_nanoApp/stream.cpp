@@ -47,7 +47,7 @@ int main(int argc, char **argv)
     attribute::Attribute gender_model(gender_path);
     attribute::Attribute age_model(age_path);
     attribute::Attribute emotion_model(emotion_path);
-    attribute::Attribute mask_model(mask_path); 
+    attribute::Attribute mask_model(mask_path);
 
     facenet.loadSavedFeatures(FLAGS_faces, &facedet_model);
 
@@ -68,37 +68,33 @@ int main(int argc, char **argv)
     std::cout << "width: " << width << ", height: " << height << ", fps: " << fps << std::endl;
 
     // -> mp4
-    cv::VideoWriter writer;
-    int codec = cv::VideoWriter::fourcc('H','2','6','4');
-    writer.open("output.mp4", codec, fps, cv::Size(width, height), true);
-    if (!writer.isOpened()) {
-        std::cerr << "Error: Could not open the output video file for writing." << std::endl;
-        return -1;
-    }
-    // streamer::Streamer streamer;
-    // streamer::StreamerConfig streamer_config(
-    //     width, height, width, height,
-    //     fps, 500000,
-    //     "main", "rtmp://localhost/live"
-    // );
-    // streamer.init(streamer_config);
+    // cv::VideoWriter writer;
+    // int codec = cv::VideoWriter::fourcc('H','2','6','4');
+    // writer.open("output.mp4", codec, fps, cv::Size(width, height), true);
+    // if (!writer.isOpened()) {
+    //     std::cerr << "Error: Could not open the output video file for writing." << std::endl;
+    //     return -1;
+    // }
+    // -> streamer
+    streamer::Streamer streamer;
+    streamer::StreamerConfig streamer_config(width, height, width, height,
+                                             fps, 500000, "main", "rtmp://localhost/live");
+    streamer.init(streamer_config);
     cv::Mat frame;
     while(cap.read(frame)){
         // FPS start time
         auto start = std::chrono::high_resolution_clock::now();
         // detect face
         auto faces = facedet_model.run(frame);
-        std::cout << "after facedet_model.run" << std::endl;
         std::vector<DetWithAttr> dets;
-        for(auto &face: faces){
-            cv::Mat crop_face = frame(getRect(
-                frame, face, facedet::kInputH, facedet::kInputW
-            ));
-            auto name = facenet.run(crop_face);
-            auto gender_label = gender_model.run(crop_face, attribute::GENDER);
-            auto age_label = age_model.run(crop_face, attribute::AGE);
-            auto emotion_label = emotion_model.run(crop_face, attribute::EMOTION);
-            auto mask_label = mask_model.run(crop_face, attribute::MASK);
+        for (auto &face : faces){
+            cv::Mat crop_face = frame(getRect(frame, face, facedet::kInputH, facedet::kInputW)); // 裁剪人脸
+            auto name = facenet.run(crop_face);                                                  // 识别人脸
+
+            auto gender_label = gender_model.run(crop_face, attribute::GENDER);    // 性别识别
+            auto age_label = age_model.run(crop_face, attribute::AGE);             // 年龄识别
+            auto emotion_label = emotion_model.run(crop_face, attribute::EMOTION); // 表情识别
+            auto mask_label = mask_model.run(crop_face, attribute::MASK);          // 口罩识别
 
             // print info
             std::cout << "name: " << name << ", gender: " << gender_label << ", age: " << age_label
@@ -112,11 +108,11 @@ int main(int argc, char **argv)
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.f;
 
         draw(frame, elapsed, dets, facedet::kInputH, facedet::kInputW);
-        // streamer.stream_frame(frame.data);
-        writer.write(frame);
+        streamer.stream_frame(frame.data);
+        // writer.write(frame);
     }
 
-    writer.release();
+    // writer.release();
     return 0;
 }
 

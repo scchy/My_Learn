@@ -11,50 +11,43 @@ namespace streamer
 
 #define STREAM_PIX_FMT    AV_PIX_FMT_YUV420P
 
-static int encode_and_write_frame(
-    AVCodecContext *codec_ctx, AVFormatContext *fmt_ctx,
-    AVFrame *frame
-){
+static int encode_and_write_frame(AVCodecContext *codec_ctx, AVFormatContext *fmt_ctx, AVFrame *frame)
+{
     AVPacket pkt = {0};
     av_init_packet(&pkt);
 
     int ret = avcodec_send_frame(codec_ctx, frame);
-    if(ret < 0)
+    if (ret < 0)
     {
         fprintf(stderr, "Error sending frame to codec context!\n");
         return ret;
     }
-    while(ret >= 0){
+    while (ret >= 0) {
         ret = avcodec_receive_packet(codec_ctx, &pkt);
-        if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF){
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
             break;
-        }else{
+        else if (ret < 0) {
             fprintf(stderr, "Error during encoding\n");
             break;
         }
 
-        av_interleaved_write_frame(fmt_ctx, &pkt);
+        av_interleaved_write_frame(fmt_ctx, &pkt);        
         av_packet_unref(&pkt);
     }
+
     return 0;
 }
 
-static int set_options_and_open_encoder(
-    AVFormatContext *fctx,
-    AVStream *stream,
-    AVCodecContext *codec_ctx,
-    AVCodec *codec,
-    std::string codec_profile,
-    double width,
-    double height,
-    int fps,
-    int bitrate,
-    AVCodecID codec_id
-){
+
+static int set_options_and_open_encoder(AVFormatContext *fctx, AVStream *stream, AVCodecContext *codec_ctx, AVCodec *codec,
+                                        std::string codec_profile, double width, double height,
+                                        int fps, int bitrate, AVCodecID codec_id)
+{
     const AVRational dst_fps = {fps, 1};
 
     codec_ctx->codec_tag = 0;
     codec_ctx->codec_id = codec_id;
+    codec_ctx->codec_type = AVMEDIA_TYPE_VIDEO;
     codec_ctx->width = width;
     codec_ctx->height = height;
     codec_ctx->gop_size = 12;
@@ -62,17 +55,20 @@ static int set_options_and_open_encoder(
     codec_ctx->framerate = dst_fps;
     codec_ctx->time_base = av_inv_q(dst_fps);
     codec_ctx->bit_rate = bitrate;
-    if(fctx->oformat->flags & AVFMT_GLOBALHEADER)
+    if (fctx->oformat->flags & AVFMT_GLOBALHEADER)
     {
         codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
-    stream->time_base = codec_ctx->time_base; // will be set afterwards bt avformat_write_header to 1/1000
+
+    stream->time_base = codec_ctx->time_base; //will be set afterwards by avformat_write_header to 1/1000
+
     int ret = avcodec_parameters_from_context(stream->codecpar, codec_ctx);
     if (ret < 0)
     {
         fprintf(stderr, "Could not initialize stream codec parameters!\n");
         return 1;
     }
+
     AVDictionary *codec_options = nullptr;
     av_dict_set(&codec_options, "profile", codec_profile.c_str(), 0);
     av_dict_set(&codec_options, "preset", "fast", 0);
@@ -102,13 +98,13 @@ Streamer::Streamer(){
 
 void Streamer::cleanup()
 {
-    if(out_codec_ctx){
+    if(out_codec_ctx) {
         avcodec_close(out_codec_ctx);
         avcodec_free_context(&out_codec_ctx);
     }
 
-    if(format_ctx){
-        if(format_ctx->pb){
+    if(format_ctx) {
+        if(format_ctx->pb) {
             avio_close(format_ctx->pb);
         }
         avformat_free_context(format_ctx);
@@ -116,52 +112,63 @@ void Streamer::cleanup()
     }
 }
 
-Streamer::~Streamer(){
+
+Streamer::~Streamer()
+{
     cleanup();
     avformat_network_deinit();
 }
 
 
-void Streamer::stream_frame(const uint8_t *data){
-    if(can_stream()){
-        const int strider[] = {static_cast<int>(config.src_width * 3)};
-        sws_scale(scaler.ctx, &data, strider, 0, config.src_height, picture.frame->data, picture.frame->linesize);
+
+void Streamer::stream_frame(const uint8_t *data)
+{
+    if(can_stream()) {
+        const int stride[] = {static_cast<int>(config.src_width*3)};
+        sws_scale(scaler.ctx, &data, stride, 0, config.src_height, picture.frame->data, picture.frame->linesize);
         picture.frame->pts += av_rescale_q(1, out_codec_ctx->time_base, out_stream->time_base);
         encode_and_write_frame(out_codec_ctx, format_ctx, picture.frame);
     }
 }
 
-// int64_t 它是固定宽度整数类型之一，确保了数据类型的位数和有符号性在不同的平台和编译器上是一致的。可以确保你的程序在不同的系统和编译器上具有相同的整数宽度，这在进行跨平台开发时尤其重要
-void Streamer::stream_frame(const uint8_t *data, int64_t frame_duration){
-    if(can_stream()){
-        const int strider[] = {static_cast<int>(config.src_width * 3)};
-        sws_scale(scaler.ctx, &data, strider, 0, config.src_height, picture.frame->data, picture.frame->linesize);
+
+void Streamer::stream_frame(const uint8_t *data, int64_t frame_duration)
+{
+    if(can_stream()) {
+        const int stride[] = {static_cast<int>(config.src_width*3)};
+        sws_scale(scaler.ctx, &data, stride, 0, config.src_height, picture.frame->data, picture.frame->linesize);
         picture.frame->pts += frame_duration; //time of frame in milliseconds
         encode_and_write_frame(out_codec_ctx, format_ctx, picture.frame);
     }
 }
 
-void Streamer::enable_av_debug_log(){
+
+void Streamer::enable_av_debug_log()
+{
     av_log_set_level(AV_LOG_DEBUG);
 }
 
-int Streamer::init(const StreamerConfig &streamer_config){
+
+int Streamer::init(const StreamerConfig &streamer_config)
+{
     init_ok = false;
     cleanup();
     config = streamer_config;
-    if(!network_init_ok){
+
+    if(!network_init_ok) {
         return 1;
     }
     //initialize format context for output with flv and no filename
     avformat_alloc_output_context2(&format_ctx, nullptr, "flv", nullptr);
-    if(!format_ctx){
+    if(!format_ctx) {
         return 1;
     }
-    
-    // AVIOContext for accessing the reasource indicated by url 
-    if(!(format_ctx->oformat->flags & AVFMT_NOFILE)){
-        int avopen_ret = avio_open2(&format_ctx->pb, config.server.c_str(), AVIO_FLAG_WRITE, nullptr, nullptr);
-        if(avopen_ret < 0){
+
+    //AVIOContext for accessing the resource indicated by url
+    if (!(format_ctx->oformat->flags & AVFMT_NOFILE)) {
+        int avopen_ret  = avio_open2(&format_ctx->pb, config.server.c_str(),
+                                     AVIO_FLAG_WRITE, nullptr, nullptr);
+        if (avopen_ret < 0)  {
             fprintf(stderr, "failed to open stream output context, stream will not work\n");
             return 1;
         }
@@ -176,7 +183,7 @@ int Streamer::init(const StreamerConfig &streamer_config){
                 avcodec_get_name(codec_id));
         return 1;
     }
-    
+
     out_stream = avformat_new_stream(format_ctx, out_codec);
     if (!out_stream) {
         fprintf(stderr, "Could not allocate stream\n");
@@ -184,10 +191,9 @@ int Streamer::init(const StreamerConfig &streamer_config){
     }
 
     out_codec_ctx = avcodec_alloc_context3(out_codec);
-    if(set_options_and_open_encoder(
-        format_ctx, out_stream, out_codec_ctx, out_codec, config.profile,
-        config.dst_width, config.dst_height, config.fps, config.bitrate, codec_id
-    )){
+
+    if(set_options_and_open_encoder(format_ctx, out_stream, out_codec_ctx, out_codec, config.profile,
+                                    config.dst_width, config.dst_height, config.fps, config.bitrate, codec_id)) {
         return 1;
     }
 
@@ -196,8 +202,9 @@ int Streamer::init(const StreamerConfig &streamer_config){
     memcpy(out_stream->codecpar->extradata, out_codec_ctx->extradata, out_codec_ctx->extradata_size);
 
     av_dump_format(format_ctx, 0, config.server.c_str(), 1);
+
     picture.init(out_codec_ctx->pix_fmt, config.dst_width, config.dst_height);
-    scaler.init(out_codec_ctx, config.src_width, config.src_height, config.dst_width, config.dst_height, SWS_BILINEAR);
+    scaler.init(out_codec_ctx, config.src_width, config.src_height,config.dst_width, config.dst_height, SWS_BILINEAR);
 
     if (avformat_write_header(format_ctx, nullptr) < 0)
     {
@@ -205,13 +212,12 @@ int Streamer::init(const StreamerConfig &streamer_config){
         return 1;
     }
 
-
     printf("stream time base = %d / %d \n", out_stream->time_base.num, out_stream->time_base.den);
 
     inv_stream_timebase = (double)out_stream->time_base.den/(double)out_stream->time_base.num;
+
     init_ok = true;
     return 0;
 }
 
-
-}
+} // namespace streamer
