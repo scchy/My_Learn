@@ -58,7 +58,14 @@ int main(int argc, char **argv)
     }
     else
     {
-        cap.open(vid, cv::CAP_FFMPEG);
+        try{
+            cap.open(vid, cv::CAP_FFMPEG);
+            std::cout << "use: cv::CAP_FFMPEG" << std::endl;
+        } catch (const std::exception& e) { 
+            cap.open(vid, cv::CAP_GSTREAMER);
+            std::cout << "use: cv::CAP_GSTREAMER" << std::endl;
+        }
+        
     }
 
     // get height with from cap
@@ -68,18 +75,18 @@ int main(int argc, char **argv)
     std::cout << "width: " << width << ", height: " << height << ", fps: " << fps << std::endl;
 
     // -> mp4
-    // cv::VideoWriter writer;
-    // int codec = cv::VideoWriter::fourcc('H','2','6','4');
-    // writer.open("output.mp4", codec, fps, cv::Size(width, height), true);
-    // if (!writer.isOpened()) {
-    //     std::cerr << "Error: Could not open the output video file for writing." << std::endl;
-    //     return -1;
-    // }
+    cv::VideoWriter writer;
+    int codec = cv::VideoWriter::fourcc('H','2','6','4');
+    writer.open("output.mp4", codec, fps, cv::Size(width, height), true);
+    if (!writer.isOpened()) {
+        std::cerr << "Error: Could not open the output video file for writing." << std::endl;
+        return -1;
+    }
     // -> streamer
-    streamer::Streamer streamer;
-    streamer::StreamerConfig streamer_config(width, height, width, height,
-                                             fps, 500000, "main", "rtmp://localhost/live");
-    streamer.init(streamer_config);
+    // streamer::Streamer streamer;
+    // streamer::StreamerConfig streamer_config(width, height, width, height,
+    //                                          fps, 500000, "main", "rtmp://localhost/live");
+    // streamer.init(streamer_config);
     cv::Mat frame;
     while(cap.read(frame)){
         // FPS start time
@@ -108,11 +115,11 @@ int main(int argc, char **argv)
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.f;
 
         draw(frame, elapsed, dets, facedet::kInputH, facedet::kInputW);
-        streamer.stream_frame(frame.data);
-        // writer.write(frame);
+        // streamer.stream_frame(frame.data);
+        writer.write(frame);
     }
 
-    // writer.release();
+    writer.release();
     return 0;
 }
 

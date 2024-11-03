@@ -4,3 +4,10 @@
 /app/crop/huge/2.jpg
 /app/crop/huge/胡歌.jpg
 /app/crop/scc/scc.jpg
+/app/crop/qianqian/qq1.jpg
+/app/crop/qianqian/qq2.jpg
+/app/crop/qianqian/qq4.jpg
+/app/crop/qianqian/qq5.jpg
+/app/crop/qianqian/qq6.jpg
+/app/crop/qianqian/qq7.jpg
+/app/crop/qianqian/qq8.jpg

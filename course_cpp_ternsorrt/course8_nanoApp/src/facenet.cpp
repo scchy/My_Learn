@@ -84,7 +84,7 @@ namespace facenet
         std::string unknown("uknown");
         memcpy(feature.data(), engine_->getHostBuffer(kOutTensorName), kOutputSize * sizeof(float));
         // 遍历所有已知人脸特征，计算欧式距离
-        float min_dist = 1000.0;
+        float min_dist = 650.0;
         int min_index = -1;
         for (int i = 0; i < saved_features_.size(); ++i)
         {

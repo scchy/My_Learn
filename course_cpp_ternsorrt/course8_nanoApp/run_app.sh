@@ -106,3 +106,19 @@ flatpak install vlc
 #   rtsp://localhost:8555/live1.sdp
 #   rtmp://localhost:1936/live
 
+# change 
+ffmpeg -i qq.mp4 -c:v libx264 -profile:v high -crf 22 -preset slow qq_new.mp4
+# 使用 FFMPEG 来旋转视频并保存新的视频文件: 这里的 transpose=1 参数将视频顺时针旋转90度
+ffmpeg -i QQ_202411.mp4 -vf "transpose=1" QQ_202411_new.mp4
+
+
+./build/stream \
+--facedet ./TAO/detect.engine \
+--facenet ./backup_onnx/facenet_sim.engine \
+--att_gender ./backup_onnx/gender_sim.engine \
+--att_age ./backup_onnx/age_sim.engine \
+--att_emotion ./backup_onnx/emotion_sim.engine \
+--att_mask ./backup_onnx/mask_sim.engine \
+--faces ./face_list.txt \
+--vid ./rtmp_server/QQ_202411_new.mp4
+

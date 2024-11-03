@@ -63,7 +63,7 @@ namespace facedet
                 detections.push_back(det);
             }
         }
-        return nms(detections, 0.45);
+        return nms(detections, 0.25);
         // return detections;
     }
 
