@@ -1,0 +1,16 @@
+unsloth==2025.5.7
+unsloth_zoo==2025.5.8
+comet-ml>=3.43.2
+torchvision==0.22.0
+bitsandbytes==0.45.5
+accelerate==1.7.0
+transformers==4.51.3
+xformers==0.0.30
+peft==0.15.2
+trl==0.15.2 
+cut_cross_entropy 
+sentencepiece 
+protobuf 
+datasets 
+huggingface_hub 
+hf_transfer
