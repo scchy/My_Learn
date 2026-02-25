@@ -65,5 +65,36 @@
     },
     "cSpell.words": [
         "psutil"
+    ],
+    
+    // Python/Pylance 类型检查配置 - 解决 torch 类型标注显示异常
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.completeFunctionParens": true,
+    "python.analysis.inlayHints.functionReturnTypes": false,
+    "python.analysis.inlayHints.variableTypes": false,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportGeneralTypeIssues": "warning",
+        "reportReturnType": "warning",
+        "reportOptionalMemberAccess": "warning",
+        "reportAttributeAccessIssue": "warning"
+    },
+    "python.analysis.extraPaths": [],
+    "python.analysis.stubPath": "",
+    "python.analysis.typeshedPaths": [],
+    
+    // 解决 torch.Tensor 等类型标注的解析问题
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.packageIndexDepths": [
+        {
+            "name": "torch",
+            "depth": 3,
+            "includeAllSymbols": true
+        },
+        {
+            "name": "numpy",
+            "depth": 2,
+            "includeAllSymbols": true
+        }
     ]
 }
