@@ -277,6 +277,12 @@ metadata:
 |  否     | `allowed-tools` | 空格分隔的预批准工具列表（实验性功能） |
 
 
+description 关键技巧：
+- 包含用户会说的具体短语（“冲刺规划”“创建任务”“设计规范”）
+- 提到相关的文件类型（.fig、.csv、PDF）
+- 说清楚适用场景，避免模糊表达
+
+
 #### 2) Body Content
 > 2026-02-24: Skill 的 Body Content 部分确实没有严格的统一规范
 
@@ -371,7 +377,19 @@ metadata:
 ## 七、Skills with the Claude API（在Claude API中使用Skills）
 
 
+Jupyter Notebook + Claude API + Skills = 可编程的领域专家  
+将"专业知识"（Skills）封装为可调用的服务，嵌入你的数据 pipeline，实现：  
+- 自动化：批量处理，无需人工逐轮对话
+- 可集成：与 PySpark、Pandas、可视化工具无缝衔接
+- 可评估：量化 Skill 效果，持续迭代优化
+- 可复现：代码即文档，实验可重复
+
+[Kimi-code-api 使用示例](./P7_skill_with_the_kim_code_api.ipynb)
+
+
 ## 八、Skills with Claude Code （在Claude Code中使用Skills）
+
+
 
 ## 九、Skills with the Claude Agent SDK （在Claude Agent SDK中使用Skills）
 
