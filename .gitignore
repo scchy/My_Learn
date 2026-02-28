@@ -34,3 +34,4 @@ course_cpp_ternsorrt/course8_faceNet/facenet
 unsloth_compiled_cache/*
 unsloth_training_checkpoints/*
 
+.vscode/
