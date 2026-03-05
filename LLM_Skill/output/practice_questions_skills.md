@@ -34,101 +34,54 @@
 
 ---
 答：
+1. 为了避免占用过多的上下文窗口进行3层渐进加载  
+1)Yaml frontmatter(name + description(包含触发词))始终加载    
+2)后面的主体内容-指令，触发时加载  
+3)相关参考资源（references, scripts, assets中的文件），按需加载  
 
+2. Tools常驻的（需要精确控制、探索性操作、或 Skills 未覆盖的场景），为智能体提供完成任务的基础能力， Skills是按需加载的（执行标准化、可复用的复杂任务流程）。  
+1)Tools的上下文管理特点：每次调用都是独立函数执行，如`read_file`或者`execute_command`;不保留前序调用的上下文，需要手动维护状态；参数必须在每次调用时完整提供  
+2)Skills的上下文管理特点：通过 `skill` 工具加载后，提供完整的操作流程指导;封装了专业领域的知识和工作流程，如 `create-mcp-server` 或 `generating-practice-questions`;内部维护了任务执行的上下文和状态流转  
+3)这种差异的重要性：这种差异使得系统既能保持底层工具的灵活性，又能通过 Skills 提供高效、可靠的专业任务执行能力。
 
-## 第三部分：编程题
-
-### 目标
-实现一个 Skill 配置解析器，能够读取 Agent Skill 的 YAML frontmatter 并返回关键信息。
-
-### 任务
-编写一个 Python 函数 `parse_skill_metadata(skill_content: str) -> dict`，该函数：
-
-1. 接收一个包含 YAML frontmatter 的 SKILL.md 内容字符串
-2. 解析出以下字段：`name`, `description`
-3. 返回一个字典，包含解析后的元数据
-
-### 输入示例
-```python
-skill_content = '''---
-name: generating-practice-questions
-description: Generate educational practice questions from lecture notes to test student understanding.
----
-
-# Practice Question Generator
-
-Generate comprehensive practice questions...
-'''
+1. 多个 Skills 组合构建复杂工作流： 简单的根因分析工作流
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    根因分析工作流 (Workflow)                      │
+│                         orchestrator Skill                       │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+│  sql-gen      │      │  data-fetch   │      │  causal-learn │
+│  Skill        │      │  Skill        │      │  Skill        │
+│               │      │               │      │               │
+│ 输入: 自然语言   │      │ 输入: SQL      │      │ 输入: 时间序列  │
+│ 输出: SQL语句   │◄─────│ 输出: DataFrame│─────►│ 输出: 因果图   │
+│               │      │               │      │               │
+└───────────────┘      └───────────────┘      └───────────────┘
+                                │                       │
+                                ▼                       ▼
+                       ┌───────────────┐      ┌───────────────┐
+                       │  feature-eng  │      │  granger-test │
+                       │  Skill        │      │  Skill        │
+                       │               │      │               │
+                       │ 输入: 原始数据   │      │ 输入: 多变量   │
+                       │ 输出: 特征表    │◄─────│ 输出: p-value │
+                       │               │      │               │
+                       └───────────────┘      └───────────────┘
+                                │
+                                ▼
+                       ┌───────────────┐
+                       │  report-gen   │
+                       │  Skill        │
+                       │               │
+                       │ 输入: 分析结果   │
+                       │ 输出: Markdown │
+                       │               │
+                       └───────────────┘
 ```
 
-### 预期输出
-```python
-{
-    "name": "generating-practice-questions",
-    "description": "Generate educational practice questions from lecture notes to test student understanding."
-}
-```
-
-### 要求
-- 使用 Python 标准库实现
-- 处理 YAML frontmatter 分隔符 `---`
-- 如果字段不存在，返回空字符串
-
-### 提示
-- YAML frontmatter 位于文件开头，由 `---` 包围
-- 可以考虑使用字符串分割方法
-- 每行格式为 `key: value`
-
----
-
-## 第四部分：应用案例
-
-### 场景
-你是一家电商公司的 AI 工程负责人，需要设计一个"智能客服助手"系统来处理客户咨询。系统需要：
-
-1. **访问订单数据库** - 查询客户订单状态、物流信息
-2. **遵循客服标准话术** - 按照公司规定的服务流程和语气回复客户
-3. **处理退款申请** - 根据退款政策判断是否符合条件
-4. **并行处理多个客户** - 同时服务多个客户不互相干扰
-
-### 数据描述
-假设有以下数据表结构：
-```sql
--- orders 表
-CREATE TABLE orders (
-    order_id VARCHAR(20) PRIMARY KEY,
-    customer_id VARCHAR(20),
-    status ENUM('pending', 'shipped', 'delivered', 'cancelled'),
-    amount DECIMAL(10,2),
-    created_at TIMESTAMP
-);
-
--- refunds 表
-CREATE TABLE refunds (
-    refund_id VARCHAR(20) PRIMARY KEY,
-    order_id VARCHAR(20),
-    reason TEXT,
-    status ENUM('pending', 'approved', 'rejected'),
-    requested_at TIMESTAMP
-);
-```
-
-### 任务
-基于 Skills、MCP、Tools、Subagents 的能力栈，设计系统架构：
-
-1. **选择合适的组件** - 说明每个场景应该使用哪种组件（MCP/Skills/Tools/Subagents）
-2. **说明理由** - 解释为什么选择该组件
-3. **画出架构图** - 用文字描述组件之间的关系和数据流向
-
-### 提示
-- 考虑"数据访问 → 做事方法 → 具体执行"的流程
-- 哪些部分需要专业知识？哪些需要外部连接？哪些需要并行处理？
-- 参考讲义中"客户洞察分析器"的架构示例
-
-### 约束
-- 必须使用至少两种不同类型的组件
-- 架构需要支持同时处理 3 个以上客户
-
----
-
-**完成时间建议**: 60-90 分钟
+4. 这个就直接看 [1. 认知演进：从专用到通用](https://blog.csdn.net/Scc_hy/article/details/158705782)
+5. MCP(链接外部的桥梁) -> Skills(专业知识的沉淀，SOP等) -> Tools(执行：提供原子能力)/Subagents(实现任务分解)

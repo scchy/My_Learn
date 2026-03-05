@@ -388,18 +388,167 @@ Jupyter Notebook + Claude API + Skills = 可编程的领域专家
 
 
 ## 八、Skills with Claude Code （在Claude Code中使用Skills）
+Skills 存放位置  
+课程中展示了项目级 Skills 的添加方式。Skills 还可以存放在以下位置：  
+| 位置                      | 说明     |
+| ----------------------- | ------ |
+| 项目级 `.claude/skills/`   | 当前项目专属 |
+| 用户级 `~/.claude/skills/` | 跨项目复用  |
+| 系统级（团队共享）               | 团队统一规范 |
+
+Frontmatter 扩展字段  
+除 name 和 description 外，Claude Code 还支持以下字段：
+
+| 字段                         | 用途              |
+| -------------------------- | --------------- |
+| `allowed-tools`            | 预批准工具列表         |
+| `model`                    | 指定模型            |
+| `disable-model-invocation` | 禁用模型自动调用        |
+| `user-invocable`           | 允许用户手动调用        |
+| `argument-hint`            | 参数提示            |
+| `context`                  | 上下文模式（如 `fork`） |
+| `agent`                    | 指定运行的 Subagent  |
+
+Skills 调用方式  
+Claude Code 中任意 Skill 支持两种调用方式：  
+
+| 方式       | 操作                 | 示例                          |
+| -------- | ------------------ | --------------------------- |
+| **模型调用** | 由 Claude 自动判断触发    | 描述需求，Claude 自动选择 Skill      |
+| **用户调用** | 手动输入 `/skill-name` | `/adding-cli-command` 后描述需求 |
+
+控制行为：
+disable-model-invocation: true → 仅用户可调用
+user-invocable: false → 仅模型可调用
+
+排查未触发问题：  
+- ✅ 添加 Skill 后重启 Claude Code  
+- ✅ Skill 描述足够详细，便于 Claude 理解使用时机  
+- ✅ 可手动调用或显式指示使用特定 Skill  
+
+Skills 与 Slash 命令合并  
+历史背景：Skills 推出前，Claude Code 有"slash 命令"功能，通过在 .claude/commands/ 下创建 Markdown 文件实现。  
+
+Subagents 与 Skills  
+内置 Subagents  
+Claude Code 内置以下 Subagents：  
+
+| Subagent            | 用途      |
+| ------------------- | ------- |
+| **Explore**         | 探索代码库结构 |
+| **Plan**            | 制定执行计划  |
+| **General-Purpose** | 通用任务处理  |
+
+结合 Skills 的两种方案   
+方案一：创建使用 Skills 的自定义 Subagent（课程演示）  
+创建 Subagent 时，通过 skills 字段在启动时注入 Skill 内容。  
+关键：Subagents 不继承父对话的 Skills，必须显式列出。  
+code-reviewer Subagent 定义示例：
+
+```yaml
+---
+name: code-reviewer
+description: "审查代码质量、安全性和规范合规性。当用户要求 review、check 或 verify 代码时使用"
+tools: Bash, Glob, Grep, Read
+model: inherit
+color: purple
+skills: reviewing-cli-command
+---
+```
+Skill 共享机制：
+- reviewing-cli-command 同时服务于主 Agent 和 Subagent
+- 主 Agent 按需加载，Subagent 启动时注入完整 SKILL.md 内容
+
+多 Skill 组合：
+```yaml
+skills: 
+  - reviewing-cli-command      # CLI 命令审查
+  - reviewing-sql-queries      # SQL 查询审查（如改用数据库存储）
+  - reviewing-python-code      # Python 代码规范
+```
+
+方案二：在 Subagent 中运行 Skills（课程未演示）  
+若需 Skill 始终在隔离上下文中运行，使用 context: fork。  
+默认行为：  
+- 内置 `general-purpose` Subagent 接收 Skill 内容作为任务  
+- 隔离上下文执行，返回结果  
+
+
+指定特定 Subagent：
+
+```yaml
+---
+name: deep-research
+description: 深入研究某一主题
+context: fork        # 强制隔离上下文
+agent: Explore       # 指定使用 Explore Subagent
+---
+
+深入研究 $ARGUMENTS：
+
+1. 使用 Glob 和 Grep 查找相关文件
+2. 阅读并分析代码
+3. 总结发现，引用具体文件
+```
 
 
 
 ## 九、Skills with the Claude Agent SDK （在Claude Agent SDK中使用Skills）
 
- 
+课程文件  
+[L7 完整文件](https://github.com/https-deeplearning-ai/sc-agent-skills-files/tree/main/L7)可在此处获取，与视频演示存在以下差异：
+| 差异项         | 视频   | 实际文件       |
+| ----------- | ---- | ---------- |
+| Subagent 模型 | 未明确  | 使用 `haiku` |
+| MCP 工具      | 自动选择 | 显式指定工具列表   |
+
+关键文件
+
+| 文件                            | 说明                         |
+| ----------------------------- | -------------------------- |
+| [System prompts](https://github.com/https-deeplearning-ai/sc-agent-skills-files/tree/main/L7/prompts)       | 主 Agent 和 Subagents 的系统提示词 |
+| [learning-a-tool Skill](https://github.com/https-deeplearning-ai/sc-agent-skills-files/tree/main/L7/.claude/skills/learning-a-tool/) | 工具学习 Skill 的文件             |
+| [`utils.py`](https://github.com/https-deeplearning-ai/sc-agent-skills-files/blob/main/L7/utils.py)            | 消息格式化工具                    |
+| [`agent.py`](https://github.com/https-deeplearning-ai/sc-agent-skills-files/blob/main/L7/agent.py)            | 主 Agent 实现                 |
+| [拍摄时生成的学习指南](https://github.com/https-deeplearning-ai/sc-agent-skills-files/tree/main/L7_notes/learning-mineru/)            | 实际输出示例                     |
+
+运行说明
+按照 README 中的步骤运行 Agent。需要 Anthropic API Key（无需订阅） 。  
+费用说明：  
+- Subagent 用 haiku + 主 Agent 用 sonnet：约 $3.43
+- Subagent 和主 Agent 都用 sonnet：约 $6.35
+
+课程中使用的提示词
+1) 步骤 1：启动研究流程    
+```
+帮我开始使用 MinerU。创建一个学习指南。先展示你的计划。
+```
+> ⏱️ Agent 完成约需 15 分钟。如需更快研究或更简洁的指南，可更新 Skill 指令和 Agent 定义。
+2) 步骤 2：审阅并确认计划  
+可同意计划，或提供反馈和建议。
+3) 步骤 3（可选）：导出到 Notion  
+如需尝试 Notion MCP 集成：
+```text
+将 ./learning-mineru/resources.md 写入 Notion 中 "Learning" 页面下的 "Resources" 子页面。
+子页面已存在。使用富文本格式。Notion MCP：可使用完整的 Notion 块类型进行 proper formatting。
+```
+> 课程使用的 Notion 账户中，已创建 "Learning" 页面及 "Resources" 子页面。
+
+进阶选项  
+| 功能         | 说明                             |
+| ---------- | ------------------------------ |
+| **高级权限控制** | 细粒度控制 Agent 和 Subagent 的工具访问权限 |
+| **持续对话界面** | 构建支持中断、新建对话、退出的交互界面            |
+
+
+
 ## Reference
 
 - [what-are-skills](https://agentskills.io/what-are-skills)
-- [claude: how-skills-work](https://claude.com/app-unavailable-in-region#how-skills-work)
-
-
-
-
+- [Claude: how-skills-work](https://claude.com/app-unavailable-in-region#how-skills-work)
+- [Claude: docs/en/skills](https://code.claude.com/docs/en/skills)
+- [Claude: Create custom agent](https://code.claude.com/docs/en/sub-agents)
+- [video: deeplearning.ai/courses/agent-skills-with-anthropic](https://learn.deeplearning.ai/courses/agent-skills-with-anthropic/lesson/cniu9b/skills-with-claude-code)
+- [Claude Agent SDK 文档](https://claude.com/app-unavailable-in-region)
+- [agentclientprotocol.com/protocol](https://agentclientprotocol.com/protocol)
 
