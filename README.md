@@ -11,3 +11,9 @@
 4- 因果效应关系
 - 之后的研究方向
 - 里面会包含一些基础、论文及论文内容的python实现
+
+5- Hello Agent
+- 通过[datawhalechina-hello-agents](https://datawhalechina.github.io/hello-agents/#/en/README_EN.md) 学习
+
+
+
