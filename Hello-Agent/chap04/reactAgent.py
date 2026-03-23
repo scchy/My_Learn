@@ -13,7 +13,7 @@ from os.path import dirname
 CUR_DIR = dirname(__file__)
 if CUR_DIR not in sys.path:
     sys.path.append(CUR_DIR)
-from HelloAgentLLM import HelloAgentsLLM, ToolExecutor, search
+from HelloAgentLLM import HelloAgentsLLM, ToolExecutor, search, calculate
 
 # ReAct 提示词模板
 REACT_PROMPT_TEMPLATE = """
@@ -375,22 +375,36 @@ if __name__ == '__main__':
         "一个网页搜索引擎。当你需要回答关于时事、事实以及在你的知识库中找不到的信息时，应使用此工具。", 
         search
     )
-    print("=" * 50)
-    print("方案1: Function Calling 模式")
-    print("=" * 50)
+    # print("=" * 50)
+    # print("方案1: Function Calling 模式")
+    # print("=" * 50)
+    # rec_agent = ReActAgent(
+    #     HelloAgentsLLM(),
+    #     tool_executor,
+    #     use_function_calling=True
+    # )
+    # res_ = rec_agent.run('英伟达最新的GPU型号是什么')
+
+    # print("\n" + "=" * 50)
+    # print("方案2: 改进的正则解析模式")
+    # print("=" * 50)
+    # rec_agent = ReActAgent(
+    #     HelloAgentsLLM(),
+    #     tool_executor,
+    #     use_function_calling=False
+    # )
+    # res_ = rec_agent.run('英伟达最新的GPU型号是什么')
+
+    tool_executor.registerTool(
+        "Calculate",
+        "安全的数学计算器。当你需要进行数学计算时，应使用此工具。",
+        calculate
+    )
     rec_agent = ReActAgent(
         HelloAgentsLLM(),
         tool_executor,
         use_function_calling=True
     )
-    res_ = rec_agent.run('英伟达最新的GPU型号是什么')
+    res_ = rec_agent.run('帮忙计算(123 + 456) * 789 / 12') 
 
-    print("\n" + "=" * 50)
-    print("方案2: 改进的正则解析模式")
-    print("=" * 50)
-    rec_agent = ReActAgent(
-        HelloAgentsLLM(),
-        tool_executor,
-        use_function_calling=False
-    )
-    res_ = rec_agent.run('英伟达最新的GPU型号是什么')
+
