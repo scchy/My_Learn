@@ -5,8 +5,10 @@
 # ============================================================
 
 import os 
+import inspect
 from openai import OpenAI
-from typing import List, Dict, Optional, Any, Callable
+from typing import List, Dict, Optional, Any, Callable, Annotated
+from typing import get_type_hints, get_origin, get_args 
 from serpapi import SerpApiClient
 
 
@@ -31,6 +33,23 @@ class HelloAgentsLLM:
             timeout=timeout
         )
     
+    def think_with_fc(self, messages, tools_schema, temperature: float = 0.0):
+        print(f"🧠 正在调用 {self.model} 模型(with fucntion call)...")
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=tools_schema,
+                tool_choice="auto",  # 让模型自己决定
+                temperature=temperature 
+            )
+            message = response.choices[0].message
+            return message
+        except Exception as e:
+            print(f"❌ 调用LLM API时发生错误: {e}")
+            return None
+
+            
     def think(self,  messages, temperature: float = 0.0):
         """
         调用大语言模型进行思考，并返回其响应。
@@ -103,6 +122,11 @@ class ToolExecutor:
     
     def getTool(self, name: str):
         return self.tools.get(name, {}).get("func")
+
+    def getAllTools(self):
+        return [
+            (name, info['description'], info['func']) for name, info in self.tools.items()
+        ]
     
     def getAvailableTools(self) -> str:
         """
@@ -113,8 +137,95 @@ class ToolExecutor:
             for name, info in self.tools.items()
         )
 
+    def build_tools_schema(self) -> List[Dict[str, Any]]:
+        """
+        函数定义示例
+            def search(query: Annotated[str, "搜索关键词"]) -> Annotated[str, "搜索结果"]:
+        """
+        schemas = []
+        for tool_name, tool_desc, tool_func in self.getAllTools():
+            signature = inspect.signature(tool_func)
+            # 处理 Annotated 类型需要特殊逻辑
+            raw_hints = get_type_hints(tool_func, include_extras=True)  # 关键：include_extras=True
+            # 2. 构建 parameters.properties
+            properties = {}
+            required = []
+            for param_name, param in signature.parameters.items():
+                if param_name in ('self', 'cls'):
+                    continue
+                
+                # 获取原始类型和 Annotated 的 metadata
+                hint = raw_hints.get(param_name, str)
+                param_type = hint
+                param_desc = f"Parameter: {param_name}"
+                
+                # 解析 Annotated[T, "description"]
+                origin = get_origin(hint)
+                if origin is not None and origin is Annotated:
+                    args = get_args(hint)
+                    param_type = args[0]  # 实际类型
+                    if len(args) > 1:
+                        param_desc = args[1]  # 描述字符串
+                
+                # 类型映射
+                type_mapping = self._get_json_schema_type(param_type)
+                
+                properties[param_name] = {
+                    "type": type_mapping["type"],
+                    "description": param_desc
+                }
+                if type_mapping.get("items"):
+                    properties[param_name]["items"] = type_mapping["items"]
+                
+                # 必填判断
+                if param.default == inspect.Parameter.empty:
+                    required.append(param_name)
+            
+            schema = {
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "description": tool_desc,
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required if required else list(properties.keys())
+                    }
+                }
+            }
+            schemas.append(schema)
+        
+        return schemas
 
-def search(query: str) -> str:
+    def _get_json_schema_type(self, python_type) -> Dict[str, Any]:
+        """
+        Python 类型转 JSON Schema 类型
+        """
+        type_map = {
+            str: {"type": "string"},
+            int: {"type": "integer"},
+            float: {"type": "number"},
+            bool: {"type": "boolean"},
+            list: {"type": "array", "items": {"type": "string"}},
+            dict: {"type": "object"},
+            Any: {"type": "string"},
+        }
+        
+        # 处理 List[str], List[int] 等泛型
+        origin = getattr(python_type, '__origin__', None)
+        if origin is list:
+            args = getattr(python_type, '__args__', (str,))
+            item_type = args[0] if args else str
+            return {
+                "type": "array",
+                "items": type_map.get(item_type, {"type": "string"})
+            }
+        
+        return type_map.get(python_type, {"type": "string"})
+
+
+
+def search(query: Annotated[str, "搜索关键词"]) -> Annotated[str, "搜索结果"]:
     """
     一个基于SerpApi的实战网页搜索引擎工具。
     它会智能地解析搜索结果，优先返回直接答案或知识图谱信息。

@@ -5,6 +5,10 @@
 import re
 import os 
 import sys 
+import json
+from enum import Enum
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
 from os.path import dirname 
 CUR_DIR = dirname(__file__)
 if CUR_DIR not in sys.path:
@@ -32,23 +36,167 @@ History: {history}
 """
 
 
+class ActionType(Enum):
+    TOOL_CALL = "tool_call"
+    FINISH = "finish"
+    THINK_ONLY = "think_only"  # 仅思考，不行动
+
+
+@dataclass
+class ParsedAction:
+    action_type: ActionType
+    tool_name: Optional[str]
+    tool_input: Optional[Dict] = None
+    final_answer: Optional[str] = None
+    reasoning: Optional[str] = None
+
+
 class ReActAgent:
     def __init__(
             self, 
             llm_client: HelloAgentsLLM, 
             tool_executor: ToolExecutor, 
-            max_steps: int = 5
+            max_steps: int = 5,
+            use_function_calling: bool = True
     ):
+        self.use_function_calling = use_function_calling
         self.llm_client = llm_client
         self.tool_executor = tool_executor
         self.max_steps = max_steps
         self.history = []
+        # 构建工具 schema
+        self.tools_schema = self.tool_executor.build_tools_schema()
+        print(f'{self.tools_schema=}')
 
-    def run(self, question: str):
-        """
+    def run(self, question: str) -> Optional[str]:
+        if self.use_function_calling:
+            return self.run_function_call(question)
+        return self.run_legacy(question)
+        
+    def run_function_call(self, question: str) -> Optional[str]:
+        """主循环"""
+        self.history = []
+        current_step = 0
+        messages: List[Dict[str, Any]] = [
+            {
+                "role": "system", 
+                "content": "你是一个能够调用工具解决问题的智能助手。请逐步思考，必要时调用工具。"
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+        while current_step < self.max_steps:
+            current_step += 1
+            print(f"\n--- 第 {current_step} 步 ---")
+            response = self.llm_client.think_with_fc(
+                messages,
+                self.tools_schema
+            )
+            if not response:
+                print("错误:LLM未能返回有效响应。")
+                break
+            # 提取思考内容（content 字段就是 reasoning）
+            reasoning = response.content or "（模型直接调用工具）"
+            print(f"🤔 思考: {reasoning[:200]}...")
+            
+            # 检查是否有工具调用
+            if response.tool_calls:
+                for tool_call in response.tool_calls:
+                    action = self._parse_function_call(tool_call)
+                    if action.action_type == ActionType.FINISH:
+                        print(f"🎉 最终答案: {action.final_answer}")
+                        return action.final_answer
+                    elif action.action_type == ActionType.TOOL_CALL \
+                        and  action.tool_name is not None \
+                        and action.tool_input is not None:
+                        print(f"🎬 调用工具: {action.tool_name}({action.tool_input})")
+                        # 执行工具
+                        tool_func = self.tool_executor.getTool(action.tool_name)
+                        if tool_func:
+                            # 提取 query 参数
+                            observation = tool_func(**action.tool_input)
+                        else:
+                            observation = f"错误: 未找到工具 '{action.tool_name}'"
+                        
+                        print(f"👀 观察: {str(observation)[:200]}...")
+                        # 构建工具响应消息（OpenAI 格式）
+                        messages.append({
+                            "role": "assistant",
+                            "content": reasoning,
+                            "tool_calls": [{
+                                "id": tool_call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": action.tool_name,
+                                    "arguments": json.dumps(action.tool_input, ensure_ascii=False)
+                                }
+                            }]
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": str(observation)
+                        })
+            else:
+                # 没有工具调用，直接回答
+                print(f"没有工具调用，直接回答[ {messages=} ] ")
+                print(f"🎉 直接回答: {reasoning}")
+                return reasoning
+        
+        print("⚠️ 达到最大步数限制")
+        return None
+
+    def _parse_function_call(self, tool_call) -> ParsedAction:
+        """解析 function call 结果"""
+        name = tool_call.function.name
+        import json
+        try:
+            arguments = json.loads(tool_call.function.arguments)
+        except json.JSONDecodeError:
+            arguments = {"query": tool_call.function.arguments}
+        if name == "Finish":
+            return ParsedAction(
+                action_type=ActionType.FINISH,
+                tool_name=None,
+                final_answer=arguments.get("answer"),
+                reasoning=arguments.get("reasoning")
+            )
+        else:
+            return ParsedAction(
+                action_type=ActionType.TOOL_CALL,
+                tool_name=name,
+                tool_input=arguments
+            )
+
+    def run_legacy(self, question: str):
+        """兼容旧版：正则解析（带改进)
         运行ReAct智能体来回答一个问题。
         格式化提示词 -> 调用LLM -> 执行动作 -> 整合结果
         """
+        # 改进的模板：更严格的格式要求
+        IMPROVED_PROMPT_TEMPLATE = """你是一个严格遵循格式的智能助手。
+
+可用工具:
+{tools}
+
+【强制输出格式】
+你必须且只能输出以下两个字段，不要有任何其他内容：
+
+Thought: <你的思考过程，单行或多行均可，但不能包含"Action:"字样>
+Action: <只能是以下三种格式之一>
+- 工具调用: ToolName{{"query": "具体输入"}}
+- 完成回答: Finish{{"answer": "最终答案", "reasoning": "得出结论的过程"}}
+
+【示例】
+Thought: 用户询问天气，我需要搜索
+Action: Search{{"query": "北京今天天气"}}
+
+现在解决问题:
+Question: {question}
+History: {history}
+"""
         tools_desc = self.tool_executor.getAvailableTools()
         self.history = [] # 每次运行时重置历史记录
         current_step = 0
@@ -57,10 +205,10 @@ class ReActAgent:
             print(f"--- 第 {current_step} 步 ---")
 
             # 1. 格式化提示词'
-            prompt = REACT_PROMPT_TEMPLATE.format(
+            prompt = IMPROVED_PROMPT_TEMPLATE.format(
                 tools=tools_desc,
                 question=question,
-                history="\n".join(self.history) # 循环的全部上下文
+                history=self._format_history() # 循环的全部上下文
             )
             # 2. 调用LLM进行思考
             messages = [{"role": "user", "content": prompt}]
@@ -73,42 +221,117 @@ class ReActAgent:
                 break
 
             # LLM 返回的是纯文本，我们需要从中精确地提取出Thought和Action。
-            # 3. 解析LLM的输出
-            thought, action = self._parse_output(response_text)
-            if thought:
-                print(f"思考: {thought}")
-            if not action:
-                print("警告:未能解析出有效的Action，流程终止。")
-                break
-            
-            # 4. 执行Action
-            answer_match = re.match(r"Finish\[(.*)\]", action)
-            if action.startswith("Finish") and answer_match is not None:
-                # `Finish[最终答案]`:当你认为已经获得最终答案时。
-                # 当你收集到足够的信息，能够回答用户的最终问题时，
-                # 你必须在Action:字段后使用 Finish[最终答案] 来输出最终答案。
-                final_answer = answer_match.group(1)
-                print(f"🎉 最终答案: {final_answer}")
-                return final_answer
-            
-            tool_name, tool_input = self._parse_action(action)
-            if not tool_name or not tool_input:
-                # ... 处理无效Action格式 ...
-                continue
-            print(f"🎬 行动: {tool_name}[{tool_input}]")
-            tool_function = self.tool_executor.getTool(tool_name)
-            if not tool_function:
-                observation = f"错误:未找到名为 '{tool_name}' 的工具。"
-            else:
-                observation = tool_function(tool_input) # 调用真实工具
-            print(f"👀 观察: {observation}")
-            # 将本轮的Action和Observation添加到历史记录中
-            self.history.append(f"Action: {action}")
-            self.history.append(f"Observation: {observation}")
+            # 改进的解析：多层容错
+            parsed = self._robust_parse(response_text)
+            if parsed.action_type == ActionType.FINISH:
+                print(f"🎉 最终答案: {parsed.final_answer}")
+                return parsed.final_answer
 
-        # 循环结束
-        print("已达到最大步数，流程终止。")
+            elif parsed.action_type == ActionType.TOOL_CALL \
+                and  parsed.tool_name is not None \
+                and parsed.tool_input is not None:
+                print(f"🎬 行动: {parsed.tool_name}({parsed.tool_input})")
+                
+                tool_func = self.tool_executor.getTool(parsed.tool_name)
+                if tool_func:
+                    query = parsed.tool_input.get("query", "")
+                    observation = tool_func(query)
+                else:
+                    observation = f"错误: 未找到工具 '{parsed.tool_name}'"
+                
+                print(f"👀 观察: {str(observation)[:200]}...")
+                
+                self.history.append({
+                    "thought": parsed.reasoning,
+                    "action": f"{parsed.tool_name}({parsed.tool_input})",
+                    "observation": observation
+                })
+            else:
+                print(f"⚠️ 解析失败，重试...")
+                continue
+        
         return None
+    
+    def _format_history(self) -> str:
+        """格式化历史记录"""
+        if not self.history:
+            return "（无历史记录）"
+        
+        lines = []
+        for h in self.history:
+            lines.append(f"Thought: {h.get('thought', '')}")
+            lines.append(f"Action: {h.get('action', '')}")
+            lines.append(f"Observation: {h.get('observation', '')}")
+            lines.append("---")
+        return "\n".join(lines)
+    
+    def _robust_parse(self, text: str) -> ParsedAction:
+        """多层容错的正则解析"""
+        # 清理文本
+        text = text.strip()
+        # 尝试 JSON 格式（新）
+        try:
+            import json
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                if "answer" in data:
+                    return ParsedAction(
+                        action_type=ActionType.FINISH,
+                        tool_name=None,
+                        final_answer=data.get("answer"),
+                        reasoning=data.get("reasoning", "")
+                    )
+                elif "query" in data:
+                    # 推断工具名
+                    tool_name = "Search"  # 默认，或从上下文推断
+                    return ParsedAction(
+                        action_type=ActionType.TOOL_CALL,
+                        tool_name=tool_name,
+                        tool_input=data
+                    )
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        # 回退到严格正则（旧格式兼容）
+        # 使用更严格的边界：Thought 必须以 Action: 结束
+        thought_match = re.search(
+            r"Thought:\s*(.*?)(?=\n\s*Action:\s*)",
+            text,
+            re.DOTALL | re.IGNORECASE
+        )
+        
+        action_match = re.search(
+            r"Action:\s*(\w+)\s*\{(.*)\}",
+            text,
+            re.DOTALL | re.IGNORECASE
+        )
+        
+        reasoning = thought_match.group(1).strip() if thought_match else ""
+
+        if action_match:
+            tool_name = action_match.group(1)
+            try:
+                import json
+                tool_input = json.loads("{" + action_match.group(2) + "}")
+            except json.JSONDecodeError:
+                tool_input = {"query": action_match.group(2)}
+            
+            if tool_name.lower() == "finish":
+                return ParsedAction(
+                    action_type=ActionType.FINISH,
+                    tool_name=None,
+                    final_answer=tool_input.get("answer", ""),
+                    reasoning=tool_input.get("reasoning", reasoning)
+                )
+            else:
+                return ParsedAction(
+                    action_type=ActionType.TOOL_CALL,
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                    reasoning=reasoning
+                )
+        # 完全失败
+        return ParsedAction(action_type=ActionType.THINK_ONLY, tool_name=None, reasoning=text)
 
     def _parse_output(self, text: str):
         """基于prompt的解析
@@ -152,9 +375,22 @@ if __name__ == '__main__':
         "一个网页搜索引擎。当你需要回答关于时事、事实以及在你的知识库中找不到的信息时，应使用此工具。", 
         search
     )
+    print("=" * 50)
+    print("方案1: Function Calling 模式")
+    print("=" * 50)
     rec_agent = ReActAgent(
         HelloAgentsLLM(),
-        tool_executor
+        tool_executor,
+        use_function_calling=True
     )
-    rec_agent.run('英伟达最新的GPU型号是什么')
+    res_ = rec_agent.run('英伟达最新的GPU型号是什么')
 
+    print("\n" + "=" * 50)
+    print("方案2: 改进的正则解析模式")
+    print("=" * 50)
+    rec_agent = ReActAgent(
+        HelloAgentsLLM(),
+        tool_executor,
+        use_function_calling=False
+    )
+    res_ = rec_agent.run('英伟达最新的GPU型号是什么')
