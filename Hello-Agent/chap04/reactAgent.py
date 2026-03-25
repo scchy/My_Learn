@@ -14,6 +14,7 @@ CUR_DIR = dirname(__file__)
 if CUR_DIR not in sys.path:
     sys.path.append(CUR_DIR)
 from HelloAgentLLM import HelloAgentsLLM, ToolExecutor, search, calculate
+from error_recovery import ErrorRecoveryStrategy, ErrorType
 
 # ReAct 提示词模板
 REACT_PROMPT_TEMPLATE = """
@@ -53,17 +54,21 @@ class ParsedAction:
 
 class ReActAgent:
     def __init__(
-            self, 
-            llm_client: HelloAgentsLLM, 
-            tool_executor: ToolExecutor, 
+            self,
+            llm_client: HelloAgentsLLM,
+            tool_executor: ToolExecutor,
             max_steps: int = 5,
-            use_function_calling: bool = True
+            use_function_calling: bool = True,
+            enable_error_recovery: bool = True
     ):
         self.use_function_calling = use_function_calling
         self.llm_client = llm_client
         self.tool_executor = tool_executor
         self.max_steps = max_steps
         self.history = []
+        self.enable_error_recovery = enable_error_recovery
+        # 错误恢复策略
+        self.error_recovery = ErrorRecoveryStrategy(max_retries=3) if enable_error_recovery else None
         # 构建工具 schema
         self.tools_schema = self.tool_executor.build_tools_schema()
         print(f'{self.tools_schema=}')
@@ -74,12 +79,15 @@ class ReActAgent:
         return self.run_legacy(question)
         
     def run_function_call(self, question: str) -> Optional[str]:
-        """主循环"""
+        """主循环（集成错误恢复）"""
         self.history = []
+        if self.error_recovery:
+            self.error_recovery.reset()
+        
         current_step = 0
         messages: List[Dict[str, Any]] = [
             {
-                "role": "system", 
+                "role": "system",
                 "content": "你是一个能够调用工具解决问题的智能助手。请逐步思考，必要时调用工具。"
             },
             {
@@ -87,16 +95,22 @@ class ReActAgent:
                 "content": question
             }
         ]
+        
         while current_step < self.max_steps:
             current_step += 1
             print(f"\n--- 第 {current_step} 步 ---")
+            
+            # 获取过滤后的工具 schema（排除已失效的工具）
+            tools_schema = self._get_filtered_tools_schema()
+            
             response = self.llm_client.think_with_fc(
                 messages,
-                self.tools_schema
+                tools_schema
             )
             if not response:
                 print("错误:LLM未能返回有效响应。")
                 break
+            
             # 提取思考内容（content 字段就是 reasoning）
             reasoning = response.content or "（模型直接调用工具）"
             print(f"🤔 思考: {reasoning[:200]}...")
@@ -112,13 +126,13 @@ class ReActAgent:
                         and  action.tool_name is not None \
                         and action.tool_input is not None:
                         print(f"🎬 调用工具: {action.tool_name}({action.tool_input})")
-                        # 执行工具
-                        tool_func = self.tool_executor.getTool(action.tool_name)
-                        if tool_func:
-                            # 提取 query 参数
-                            observation = tool_func(**action.tool_input)
-                        else:
-                            observation = f"错误: 未找到工具 '{action.tool_name}'"
+                        
+                        # 执行工具（带错误恢复）
+                        observation = self._execute_tool_with_recovery(
+                            action.tool_name,
+                            action.tool_input,
+                            messages
+                        )
                         
                         print(f"👀 观察: {str(observation)[:200]}...")
                         # 构建工具响应消息（OpenAI 格式）
@@ -139,14 +153,105 @@ class ReActAgent:
                             "tool_call_id": tool_call.id,
                             "content": str(observation)
                         })
+                        
+                        # 如果观察结果包含错误恢复提示，也添加到消息中
+                        if isinstance(observation, str) and observation.startswith("[RECOVERY]"):
+                            messages.append({
+                                "role": "system",
+                                "content": f"提示: {observation}"
+                            })
             else:
                 # 没有工具调用，直接回答
-                print(f"没有工具调用，直接回答[ {messages=} ] ")
+                print(f"没有工具调用，直接回答")
                 print(f"🎉 直接回答: {reasoning}")
                 return reasoning
         
         print("⚠️ 达到最大步数限制")
+        
+        # 输出错误恢复统计
+        if self.error_recovery:
+            summary = self.error_recovery.get_error_summary()
+            if summary["total_errors"] > 0:
+                print(f"\n📊 错误恢复统计: {summary}")
+        
         return None
+    
+    def _get_filtered_tools_schema(self) -> List[Dict]:
+        """获取过滤后的工具 schema（排除已失效的工具）"""
+        if not self.enable_error_recovery or not self.error_recovery:
+            return self.tools_schema
+        
+        excluded_tools = set(self.error_recovery.get_excluded_tools())
+        if not excluded_tools:
+            return self.tools_schema
+        
+        filtered = []
+        for tool in self.tools_schema:
+            tool_name = tool.get("function", {}).get("name", "")
+            if tool_name not in excluded_tools:
+                filtered.append(tool)
+        
+        return filtered if filtered else self.tools_schema  # 至少保留原始 schema
+    
+    def _execute_tool_with_recovery(self, tool_name: str, tool_input: Dict, messages: List[Dict]) -> str:
+        """带错误恢复的工具执行"""
+        try:
+            tool_func = self.tool_executor.getTool(tool_name)
+            if not tool_func:
+                # 工具不存在，触发错误恢复
+                error = Exception(f"Tool not found: {tool_name}")
+                if self.enable_error_recovery and self.error_recovery:
+                    available_tools = list(self.tool_executor.tools.keys())
+                    action = self.error_recovery.on_tool_error(error, tool_name, messages, available_tools)
+                    
+                    # 记录到历史
+                    self.history.append({
+                        "tool": tool_name,
+                        "error": str(error),
+                        "recovery_action": action.action
+                    })
+                    
+                    result = f"[RECOVERY] {action.feedback_message}"
+                    if action.suggested_alternative:
+                        result += f" 建议尝试: {action.suggested_alternative}"
+                    return result
+                else:
+                    return f"错误: 未找到工具 '{tool_name}'"
+            
+            # 执行工具
+            observation = tool_func(**tool_input)
+            
+            # 成功后重置重试计数
+            if self.error_recovery:
+                self.error_recovery.retry_count = 0
+            
+            return observation
+            
+        except Exception as e:
+            # 执行出错，触发错误恢复
+            if self.enable_error_recovery and self.error_recovery:
+                available_tools = list(self.tool_executor.tools.keys())
+                action = self.error_recovery.on_tool_error(e, tool_name, messages, available_tools)
+                
+                # 记录到历史
+                self.history.append({
+                    "tool": tool_name,
+                    "input": tool_input,
+                    "error": str(e),
+                    "recovery_action": action.action
+                })
+                
+                # 执行等待（如果需要）
+                if action.wait_time > 0:
+                    import time
+                    time.sleep(action.wait_time)
+                
+                result = f"[RECOVERY] {action.feedback_message}"
+                if action.suggested_alternative:
+                    result += f" 建议尝试: {action.suggested_alternative}"
+                return result
+            else:
+                return f"错误: 工具执行失败 - {str(e)}"
 
     def _parse_function_call(self, tool_call) -> ParsedAction:
         """解析 function call 结果"""
