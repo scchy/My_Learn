@@ -5,7 +5,8 @@
 
 
 import argparse
-import json 
+import json
+import os
 import re 
 import shutil
 import sys 
@@ -336,11 +337,6 @@ class KimiModelClient:
         """
         self.model = model
         self.work_dir = "."
-        if host and host not in ("http://localhost:11434", "http://127.0.0.1:11434"):
-            # Only use host as work_dir if it looks like a path, not a URL.
-            parsed = urllib.parse.urlparse(host)
-            if parsed.scheme not in ("http", "https"):
-                self.work_dir = host
         self.temperature = temperature
         self.top_p = top_p
         self.timeout = timeout
@@ -384,12 +380,20 @@ class KimiModelClient:
             "--command", prompt
         ]
         
+        env = os.environ.copy()
+        for key in list(env.keys()):
+            if key.lower() in {
+                "http_proxy", "https_proxy", "all_proxy",
+                "ftp_proxy", "socks_proxy", "no_proxy",
+            }:
+                env.pop(key, None)
         try:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=self.timeout
+                timeout=self.timeout,
+                env=env,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Kimi 调用失败: {result.stderr}")
@@ -1188,7 +1192,7 @@ def build_arg_parser():
     )
     parser.add_argument("prompt", nargs="*", help="Optional one-shot prompt.")
     parser.add_argument("--cwd", default=".", help="Workspace directory.")
-    parser.add_argument("--model", default="qwen3.5:4b", help="Kimi model name.")
+    parser.add_argument("--model", default="kimi-2.5", help="Kimi model name.")
     parser.add_argument("--host", default="http://127.0.0.1:11434", help="Kimi server URL.")
     parser.add_argument("--ollama-timeout", type=int, default=300, help="Kimi request timeout in seconds.")
     parser.add_argument("--resume", default=None, help="Session id to resume or 'latest'.")
