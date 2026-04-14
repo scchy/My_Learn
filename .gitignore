@@ -199,3 +199,8 @@ temp/
 *.tgz
 *.rar
 *.7z
+
+
+
+# mini-coding-agent sessions
+Hello-Agent/mini-code/.mini-coding-agent/sessions/

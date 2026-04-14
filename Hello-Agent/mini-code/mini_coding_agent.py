@@ -185,7 +185,7 @@ class WorkspaceContext:
                     check=True,
                     timeout=5,
                 )
-                return result.stdout.strip() or fallback
+                return self._extract_reply(result.stdout).strip() or fallback
             except Exception:
                 return fallback
 
@@ -397,7 +397,7 @@ class KimiModelClient:
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Kimi 调用失败: {result.stderr}")
-            return result.stdout
+            return self._extract_reply(result.stdout)
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Kimi 请求超时（{self.timeout}秒）")
         except FileNotFoundError:
@@ -405,6 +405,41 @@ class KimiModelClient:
                 "kimi 命令未找到，请先安装 kimi-cli\n"
                 "安装命令: pip install kimi-cli"
             )
+
+    @staticmethod
+    def _extract_reply(stdout):
+        """
+        从 kimi --print 的结构化日志输出中提取模型回复文本。
+        优先提取 TextPart 中的 text 字段；如果没有则返回原始输出。
+        """
+        # 尝试匹配 TextPart(...) 中的 text='...'（支持多行，非贪婪）
+        m = re.search(
+            r"TextPart\([^)]*text\s*=\s*'([^']*\\n[^']*)'",
+            stdout,
+            re.DOTALL
+        )
+        if m:
+            text = m.group(1)
+            text = text.replace('\\n', '\n').replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+            return text
+
+        m = re.search(
+            r'TextPart\([^)]*text\s*=\s*"([^"]*\\n[^"]*)"',
+            stdout,
+            re.DOTALL
+        )
+        if m:
+            text = m.group(1)
+            text = text.replace('\\n', '\n').replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+            return text
+
+        m = re.search(r"TextPart\([^)]*text\s*=\s*'([^']+)'", stdout)
+        if m:
+            text = m.group(1)
+            text = text.replace('\\n', '\n').replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+            return text
+
+        return stdout
 
 
 class MiniAgent:
