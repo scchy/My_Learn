@@ -115,7 +115,8 @@ pi-agent-mini/
 ---
 
 ### Day 2：工具系统
-
+> Done 2026-07-22-20:03
+> 
 **文件**：`pi_agent/tools.py`  
 **代码量**：~100 行  
 **核心机制**：装饰器注册、Schema 自动生成、危险操作确认、超时截断
@@ -131,13 +132,13 @@ pi-agent-mini/
 
 | 工具 | 功能 | 危险 |
 |:---|:---|:---:|
-| `read` | 读取文件内容（支持 offset/limit）| ❌ |
+| `read` | 读取文件内容（支持 offset/limit）| ✅ |
 | `bash` | 执行 shell 命令 | ✅ |
-| `edit` | 文件内字符串替换 | ❌ |
-| `write` | 写入文件（自动创建目录）| ❌ |
-| `grep` | 文件内容搜索 | ❌ |
-| `find` | 文件查找（通配符）| ❌ |
-| `ls` | 目录列表 | ❌ |
+| `edit` | 文件内字符串替换 | ✅ |
+| `write` | 写入文件（自动创建目录）| ✅ |
+| `grep` | 文件内容搜索 | ✅ |
+| `find` | 文件查找（通配符）| ✅ |
+| `ls` | 目录列表 | ✅ |
 
 **参考源码**：
 - Pi 官方 `pi-coding-agent` 工具集：[packages/coding-agent/src/tools](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src)
@@ -145,11 +146,11 @@ pi-agent-mini/
 - Pi 工具 Schema 定义：[packages/agent-core/src](https://github.com/earendil-works/pi/tree/main/packages/agent-core/src)
 
 **验收标准**：
-- [ ] 7 个工具全部可用，Schema 自动生成
-- [ ] `bash` 等危险工具执行前必须确认
-- [ ] 工具输出超长自动截断（4000 字符）
-- [ ] 工具超时 30 秒自动终止
-- [ ] 错误处理：文件不存在、字符串未找到等
+- [x] 7 个工具全部可用，Schema 自动生成
+- [x] `bash` 等危险工具执行前必须确认
+- [x] 工具输出超长自动截断（4000 字符）
+- [x] 工具超时 30 秒自动终止
+- [x] 错误处理：文件不存在、字符串未找到等
 
 **预期踩坑**：`inspect.signature` 对复杂类型处理不好，先只用 `str` 类型
 
