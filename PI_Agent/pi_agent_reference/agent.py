@@ -26,7 +26,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from pi_agent_reference.context import CompressionConfig, ContextCompressor
-from pi_agent_reference.llm import (
+from pi_agent.llm import (
     LLMClient,
     LLMError,
     Message,

@@ -157,7 +157,8 @@ pi-agent-mini/
 ---
 
 ### Day 3：Agent Loop 核心
-
+> Done 2026-07-23-15:45
+> 
 **文件**：`pi_agent/agent.py`  
 **代码量**：~150 行  
 **核心机制**：ReAct 循环、并行工具执行、流式实时渲染、steering 中断
@@ -180,12 +181,12 @@ pi-agent-mini/
 - Pi steering 机制：[packages/coding-agent/src/commands](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src/commands)
 
 **验收标准**：
-- [ ] ReAct 循环完整：推理 → 工具 → 观察 → 再推理
-- [ ] 多工具并行执行（`asyncio.gather`）
-- [ ] 流式输出实时渲染（`rich.Live`）
-- [ ] 支持 steering 中断当前工具链
-- [ ] max_turns 保护死循环
-- [ ] 每轮自动触发上下文压缩
+- [x] ReAct 循环完整：推理 → 工具 → 观察 → 再推理
+- [x] 多工具并行执行（`asyncio.gather`）
+- [x] 流式输出实时渲染（`rich.Live`）
+- [x] 支持 steering 中断当前工具链
+- [x] max_turns 保护死循环
+- [x] 每轮自动触发上下文压缩
 
 **预期踩坑**：
 - `rich.Live` 内不能嵌套 `Live`，工具结果用 `console.print(Panel)`

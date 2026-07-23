@@ -130,7 +130,7 @@ class ToolRegistry:
             return ToolResult.error(f"工具没有实现: {name}")
 
         try:
-            result = await asyncio.waut_for(
+            result = await asyncio.wait_for(
                 asyncio.to_thread(spec._func, **arguments),
                 timeout=spec.timeout
             )

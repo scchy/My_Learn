@@ -118,7 +118,7 @@ def estimate_tokens(text: str | None) -> int:
     return cjk + max(1, (other + 3) // 4)
 
 
-def estimate_message_tokens(messages: list[Message]): # -> int:
+def estimate_messages_tokens(messages: list[Message]): # -> int:
     total = 0 
     for msg in messages:
         total += estimate_tokens(msg.content)

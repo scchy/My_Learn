@@ -13,8 +13,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from pi_agent_reference.llm import LLMClient, Message, estimate_messages_tokens
-
+# from pi_agent_reference.llm import LLMClient, Message, estimate_messages_tokens
+from pi_agent.llm import LLMClient, Message, estimate_messages_tokens
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
