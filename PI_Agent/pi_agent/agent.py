@@ -28,7 +28,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from pi_agent.tools import ToolRegistry, ToolResult, create_default_registry
-from pi_agent.context import CompressionConfig, ContextCompressor
+from pi_agent.context import CompactionConfig, ContextCompactor
 from pi_agent.llm import (
     LLMClient,
     LLMError,
@@ -70,10 +70,9 @@ class AgentConfig:
         )
     )
 
-    # 压缩阈值
-    tier1_ratio: float = 0.50
-    tier2_ratio: float = 0.75
-    tier3_ratio: float = 0.90
+    # 上下文压缩（Compaction）配置
+    reserve_tokens: int = 16384      # 为模型生成预留的空间
+    keep_recent_tokens: int = 20000  # 保留最近原始消息的 token 预算
 
 
 # ---------------------------------------------------------------------------
@@ -121,12 +120,12 @@ class Agent:
         self.confirm_dangerous: bool = confirm_dangerous   # 是否在执行危险工具前确认
 
         # ---- 上下文压缩器 ----
-        # 三层策略：>50% 截断旧消息 / >70% LLM 摘要 / >90% 紧急压缩
-        self.compressor = ContextCompressor(
-            CompressionConfig(
-                tier1_ratio=self.config.tier1_ratio,
-                tier2_ratio=self.config.tier2_ratio,
-                tier3_ratio=self.config.tier3_ratio,
+        # Pi-style compaction：保留最近 keep_recent_tokens 原始消息，
+        # 更早的历史压缩成结构化摘要。
+        self.compressor = ContextCompactor(
+            CompactionConfig(
+                reserve_tokens=self.config.reserve_tokens,
+                keep_recent_tokens=self.config.keep_recent_tokens,
             )
         )
         

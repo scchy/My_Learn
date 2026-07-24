@@ -13,7 +13,7 @@
 | 维度 | 读源码/文档 | 手敲重构 |
 |:---|:---|:---|
 | Agent Loop 边界条件 | 知道"有重试" | 亲手处理流式 chunk 中断、工具超时、malformed JSON |
-| 上下文压缩策略 | 知道"三层压缩" | 亲手调参 50%/70%/90% 阈值，感受 token 与信息损失的 trade-off |
+| 上下文压缩策略 | 知道"三层压缩" | 亲手实现 Pi-style Compaction：从后往前找合法切割点、Turn 边界保护、双摘要、增量更新、文件操作追踪 |
 | 工具安全边界 | 知道"要确认" | 亲手设计 `dangerous` 标记、用户确认流程、沙箱逃逸防护 |
 | 扩展系统 | 知道"可插件化" | 亲手用 `importlib` 实现动态加载，理解热更新与状态隔离 |
 
@@ -195,102 +195,95 @@ pi-agent-mini/
 ---
 
 ### Day 4：上下文压缩
-> Done 2026-07-24-17:13
+> Done 2026-07-24-17:13 | New Fix 2026-07-25-00:24
 > 
 **文件**：`pi_agent/context.py`  
 **代码量**：~80 行  
-**核心机制**：三层策略、Token 驱动决策、保留系统提示 + 最近 N 条
+**核心机制**：Pi-style Compaction —— 绝对 Token 预算驱动、从后往前找合法切割点、Turn 边界保护、双摘要、增量更新、文件操作追踪
 
-**三层策略**：
+**整体架构：5 阶段流程**
 
-| 层级 | 触发条件 | 动作 | 保留内容 |
-|:---|:---|:---|:---|
-| 第一层 | token > 50% limit | 截断最旧消息 | 系统提示 + 最近 4 条 |
-| 第二层 | token > 70% limit | 摘要旧消息（调用 LLM）| 系统提示 + 最近 4 条 + 摘要 |
-| 第三层 | token > 90% limit | 紧急压缩 | 系统提示 + 最近 2 条 + 超短摘要 |
+```
+Stage 1: 判断是否触发压缩
+   └── context_tokens > context_limit - reserve_tokens ?
+Stage 2: find_cut_point()
+   └── 从最新消息倒推累积 token，超过 keep_recent_tokens 后向前对齐合法切割点
+Stage 3: generate_summary()
+   └── 压缩切割点之前的历史（首次用 SUMMARIZATION_PROMPT，增量用 UPDATE）
+Stage 4: generate_turn_prefix_summary() [可选]
+   └── 当切割点落在 Turn 中间时，并行生成当前 Turn 前缀摘要
+Stage 5: compact()
+   └── 合并双摘要 + 文件操作记录，生成 [上下文摘要] 消息插入历史
+```
 
 **关键设计**：
-- `CompressionConfig`：阈值和保留数量可配置
-- `compress_if_needed()`：每轮 Agent Loop 调用，自动决策
-- `get_stats()`：返回上下文统计（messages 数、token 数、使用率）
+- `CompactionConfig`：`reserve_tokens`（生成预留）、`keep_recent_tokens`（保留最近原始消息预算）、摘要长度限制
+- `pi_agent/compaction/cutpoint.py`：`find_cut_point()` / `find_turn_start_index()` / `is_valid_cut_point()`
+- `pi_agent/compaction/token_utils.py`：`estimate_tokens()` chars/4 启发式 + `calculate_context_tokens()` 从 usage 计算
+- `pi_agent/compaction/summary.py`：结构化摘要 Prompt + 双摘要合并
+- `pi_agent/compaction/fileops.py`：从 tool_calls 提取 `read_files` / `modified_files`
+- `ContextCompactor.compress_if_needed()`：每轮 Agent Loop 调用，自动决策
+- `get_stats()`：返回上下文统计
 
 **参考源码**：
-- Pi 上下文压缩（Compaction）：[packages/agent-core/src/compaction](https://github.com/earendil-works/pi/tree/main/packages/agent-core/src/compaction)
+- Pi 上下文压缩（Compaction）：[packages/coding-agent/src/core/compaction/compaction.ts](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src/core/compaction)
 - Pi 配置系统：[packages/coding-agent/src/config](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src/config)
-- CoreCoder 上下文管理：[corecoder/context.py](https://github.com/he-yufeng/CoreCoder/blob/main/corecoder/context.py)
 
 **验收标准**：
-- [x] 三层压缩策略按阈值正确触发
-- [x] 截断时保留系统提示和最近 N 条
-- [x] 摘要压缩调用 LLM 自身，长度可控
-- [x] 紧急压缩极度 aggressive，不崩溃
+- [x] 按绝对 token 预算触发压缩：`estimated > context_limit - reserve_tokens`
+- [x] 保留最近 `keep_recent_tokens` 的原始消息
+- [x] 不单独切割 toolResult，保证 assistant + toolResult 配对
+- [x] Split Turn 时生成双摘要（历史摘要 + Turn 前缀摘要）
+- [x] 摘要输出结构化：Goal / Progress / Next Steps / Critical Context
+- [x] 摘要中保留文件操作轨迹（read / modified）
+- [x] 系统提示始终保留
 - [x] 提供 stats 接口供外部监控
 
-**预期踩坑**：LLM 摘要可能丢失关键信息，需观察实际效果调 `max_length` 和 `preserve_last_n`
+**预期踩坑**：
+- LLM 摘要可能丢失关键信息，需观察实际效果调 `summary_max_tokens`
+- `keep_recent_tokens` 与 `reserve_tokens` 的比例决定压缩频率和保留上下文多少
 
-**发现问题**
- 以下逻辑是对的，但是上下文总是从0开始累加上去的，
- 所以第一次到50%就压缩，之后再到50%还是继续压缩，永远到50%再压缩
+**设计演进**
 
- ```
-   ratio < 0.50  → 不压缩，直接返回
-   0.50 ≤ ratio < 0.70 → Tier 1：丢弃最旧块，保留最近 4 块
-   0.70 ≤ ratio < 0.90 → Tier 2：摘要旧块 + 保留最近 3 块
-   ratio ≥ 0.90 → Tier 3：紧急压缩
- ```
-
-和Kimi-k2.7 coding 探讨解决，最终方案如下：
-
-**调整后的三级压缩方案**
-
-核心原则：**每一级压缩都必须真正减少上下文 token；如果当前策略做不到，就升级到更激进的策略。**
-
-触发阈值：
+最初实现是简单的“三级阈值压缩”：
 
 ```
-ratio < 0.50        → 不压缩，直接返回
-0.50 ≤ ratio < 0.75 → Tier 1：块级截断
-0.75 ≤ ratio < 0.90 → Tier 2：LLM 摘要旧块
-ratio ≥ 0.90        → Tier 3：紧急压缩
+ratio < 0.50  → 不压缩
+0.50 ≤ ratio < 0.70 → Tier 1：丢弃最旧块
+0.70 ≤ ratio < 0.90 → Tier 2：摘要旧块
+ratio ≥ 0.90 → Tier 3：紧急压缩
 ```
 
-其中 `ratio = estimated_tokens / context_limit`，默认 `context_limit = 128000`。
+问题：
+1. 单一阈值导致反复触发 Tier 1；
+2. 固定保留块数在 256K 大窗口下过度压缩；
+3. 没有 Turn 边界保护，可能切断 tool-call/tool-result；
+4. 不追踪文件操作，工程上下文易丢失。
 
-**Tier 1（50% ~ 75%）：块级截断，必须至少丢弃 1 个旧块**
+**最终方案：Pi-style Compaction**
 
-- 将非系统消息按“块”划分：
-  - 单条 `user` 消息为一个块；
-  - 单条普通 `assistant` 消息为一个块；
-  - `assistant`（含 `tool_calls`）+ 后续所有 `tool` 消息合并为一个块，保证工具调用对不被切断。
-- 保留最近 `tier1_preserve_blocks` 个块（默认 4），但最多保留到 `len(blocks) - 1`，即**至少丢弃 1 个旧块**。
-- 如果只剩 1 个非系统块，丢块无法降低 token，则直接升级到 Tier 2 摘要。
+参考 Pi Agent 的 `compaction.ts`，改为**绝对 token 预算 + 双摘要 + 文件追踪**：
 
-**Tier 2（75% ~ 90%）：LLM 摘要旧块，块数少时只保留最近 1 个完整块**
+1. **触发条件**：`estimated_tokens > context_limit - reserve_tokens`
+   - 默认 `reserve_tokens = 16384`，给模型生成留足空间。
+2. **保留策略**：始终保留最近 `keep_recent_tokens`（默认 20000）的原始消息，不压缩。
+3. **切割点算法**：从后往前累积 token，超过 `keep_recent_tokens` 后向前对齐合法切割点。
+   - 合法切割点：`user`、`assistant`（含后续 tool results）
+   - 非法切割点：单独出现的 `toolResult`（避免孤儿）
+4. **Turn 边界保护**：
+   - 若切割点落在 Turn 中间（非 user 起点），标记 `is_split_turn = true`。
+   - 并行生成两个摘要：历史摘要 + 当前 Turn 前缀摘要。
+5. **增量摘要**：后续压缩在上一次摘要基础上更新（当前实现保留接口，首次实现为重新生成）。
+6. **文件操作追踪**：从 `read`/`edit`/`write`/`bash` 等 tool_calls 中提取文件路径，附加到摘要中。
 
-- 默认阈值从 70% 调整为 **75%**，给 Tier 1 更多丢块空间，减少不必要的 LLM 摘要调用。
-- 块数充足时（> 3），保留最近 3 个块，摘要更早的旧块。
-- 块数 ≤ 3 时，说明历史已不多但每块很长，**只保留最近 1 个完整块，其余全部摘要**，避免“只摘要 1 块、保留 2 大块导致 token 仍高”的情况。
-- 只剩 1 个块时，直接摘要整个非系统历史。
-
-**Tier 3（≥ 90%）：紧急压缩，保留最近 1 个块**
-
-- 保留最近 1 个块，其余全部紧急摘要（摘要长度限制更短，默认 200 tokens）。
-- 只剩 1 个块时，直接摘要整个非系统历史。
-- 保留 1 个块是“还能继续当前任务”的最小代价；由于 75%→90% 的跳变较少，该策略触发频率低。
-
-**三种升级路径**
-
-| 升级类型 | 触发条件 |
-|---|---|
-| 自然升级 | ratio 达到 75% / 90% 阈值 |
-| 强制升级 | Tier 1 连续触发 `tier1_escalation_limit`（默认 3）次后，强制进入 Tier 2 |
-| 兜底升级 | Tier 1 执行后发现消息数量没有减少，立即进入 Tier 2 |
-
-**关键修正点**
-
-旧实现的 bug 在于：当 `len(blocks) <= preserve_blocks` 时，三个 tier 都会原样返回所有消息，导致压缩触发后 token 没有下降，形成“永远到 50% 再压缩”的死循环。新实现保证每一级都真正减少消息，无法减少时自动升级。
-
-**相关文件**：`pi_agent/context.py`、`pi_agent/agent.py`、`tests/test_context.py`
+**相关文件**：
+- `pi_agent/context.py`
+- `pi_agent/agent.py`
+- `pi_agent/compaction/cutpoint.py`
+- `pi_agent/compaction/token_utils.py`
+- `pi_agent/compaction/summary.py`
+- `pi_agent/compaction/fileops.py`
+- `tests/test_context.py`
 
 ---
 
@@ -463,14 +456,14 @@ python -m pi_agent.cli chat --model gpt-4o-mini --api-key sk-xxx
 
 ---
 
-## 十、关键修正记录（相比初版计划的 6 个重要修正）
+## 十、关键修正记录（相比初版计划的重要修正）
 
 | # | 问题 | 严重度 | 修正方案 | 影响文件 |
 |---|------|--------|---------|---------|
 | 1 | `_last_tool_calls` 副作用：Agent 并发调用时互相覆盖 | 🔴 | 改为 `Delta` 类型的流式协议，`chat()` 返回 `AsyncIterator[Delta]`，调用方自行累积 | `llm.py` |
 | 2 | Steering 中断缺少取消令牌 | 🔴 | `chat()` 接受 `cancel_event: asyncio.Event`，每行 SSE 检查 `is_set()`，触发即抛 `StreamCancelledError` | `llm.py`, `agent.py` |
 | 3 | 工具异常未反馈给 LLM（会导致 Agent 死循环） | 🔴 | `_execute_tools()` 用 `asyncio.gather(return_exceptions=True)`，异常包装为 `ToolResult(is_error=True)` 以 tool message 注入对话 | `agent.py`, `tools.py` |
-| 4 | 上下文压缩可能切断工具调用对 | 🟡 | 按"块"（block）划分消息：`assistant(tool_calls) + tool_results` 作为一个不可分割的块 | `context.py` |
+| 4 | 上下文压缩采用简单三级阈值，无 Turn 边界保护 | 🔴 | 重写为 Pi-style Compaction：绝对 token 预算驱动、从后往前找合法切割点、双摘要保护 Split Turn、文件操作追踪 | `context.py`, `pi_agent/compaction/*.py` |
 | 5 | CLI 缺少 --base-url，只能连 DeepSeek | 🟡 | CLI 增加 `--base-url` / `-b` 参数，支持任意 OpenAI 兼容端点 | `cli.py` |
 | 6 | JSONL 树遍历 O(n)，会话量大时变慢 | 🟡 | 启动时全量载入 `dict[str, SessionNode]`，退出时 tempfile 原子写回 | `session.py` |
 

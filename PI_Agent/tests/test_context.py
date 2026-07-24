@@ -1,13 +1,12 @@
 """
-Day 4: 上下文压缩模块测试
+Day 4: 上下文压缩（Compaction）模块测试
 ======================
-覆盖内容：
-- 未达阈值时不压缩
-- Tier 1 块级截断（含块数 ≤ preserve 时的兜底压缩）
-- Tier 1 连续触发升级到 Tier 2
-- Tier 2 / Tier 3 摘要压缩
-- 工具调用对完整性
-- 统计信息
+基于 Pi Agent compaction.ts 的简化实现：
+- 绝对 token 预算触发
+- 从后往前找合法切割点
+- 保护 tool-call/tool-result 配对
+- Split Turn 双摘要
+- 文件操作追踪
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock
 
-from pi_agent.context import CompressionConfig, ContextCompressor
+from pi_agent.context import CompactionConfig, ContextCompactor
 from pi_agent.llm import Message, estimate_messages_tokens
 
 pytestmark = pytest.mark.anyio
@@ -29,201 +28,162 @@ def client():
     return c
 
 
-def _limit_for_ratio(messages: list[Message], ratio: float) -> int:
-    """根据消息估算 token 与目标比例反推出 context_limit。"""
-    return int(estimate_messages_tokens(messages) / ratio)
+def _context_limit_for_tokens(tokens: int, context_limit: int = 128000) -> int:
+    """固定 context_limit，用于测试触发阈值。"""
+    return context_limit
 
 
-class TestNoCompression:
-    async def test_ratio_below_threshold_returns_original(self, client):
-        config = CompressionConfig(tier1_ratio=0.5)
-        compressor = ContextCompressor(config)
-        messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="hi"),
-        ]
-        result = await compressor.compress_if_needed(messages, 10000, client)
+def _make_messages(n: int, chars: int = 400) -> list[Message]:
+    """构造交替的 user/assistant 消息，每条约 chars/4 tokens。"""
+    messages = []
+    for i in range(n):
+        role = "user" if i % 2 == 0 else "assistant"
+        messages.append(Message(role=role, content=chr(97 + i % 26) * chars))
+    return messages
+
+
+class TestNoCompaction:
+    async def test_below_threshold_no_compression(self, client):
+        """未超过触发阈值时不压缩。"""
+        config = CompactionConfig(
+            reserve_tokens=16384,
+            keep_recent_tokens=20000,
+        )
+        compactor = ContextCompactor(config)
+        messages = [Message(role="user", content="x" * 1000)]
+        # 128K 上下文，阈值 128K - 16K = 112K，远未触发
+        result = await compactor.compress_if_needed(messages, 128000, client)
+
         assert result == messages
         assert client.summarize.call_count == 0
 
 
-class TestTier1Compression:
-    async def test_drop_old_blocks(self, client):
-        """块数充足时，Tier 1 丢弃旧块保留最近 N 个。"""
-        config = CompressionConfig(tier1_ratio=0.5, tier1_preserve_blocks=2)
-        compressor = ContextCompressor(config)
-        messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="a" * 500),
-            Message(role="assistant", content="b" * 500),
-            Message(role="user", content="c" * 500),
-            Message(role="assistant", content="d" * 500),
-        ]
-        # 让比例落在 Tier 1 区间 [0.5, 0.7)
-        context_limit = _limit_for_ratio(messages, 0.6)
-        result = await compressor.compress_if_needed(messages, context_limit, client)
-
-        # 保留 system + 最近 2 个块（user c, assistant d）
-        assert len(result) == 3
-        assert result[0].role == "system"
-        assert [m.content for m in result[1:]] == ["c" * 500, "d" * 500]
-        assert client.summarize.call_count == 0
-
-    async def test_compress_when_blocks_less_than_preserve(self, client):
-        """关键回归测试：块数 ≤ tier1_preserve_blocks 时仍应至少丢弃 1 个块。
-
-        旧实现会直接返回所有块，导致“触发压缩但 token 不降”的死循环。
-        """
-        config = CompressionConfig(tier1_ratio=0.5, tier1_preserve_blocks=4)
-        compressor = ContextCompressor(config)
-        messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="x" * 500),
-            Message(role="assistant", content="y" * 500),
-            Message(role="user", content="z" * 500),
-        ]
-        context_limit = _limit_for_ratio(messages, 0.6)
-        result = await compressor.compress_if_needed(messages, context_limit, client)
-
-        # 应丢弃至少一个块
-        assert len(result) < len(messages)
-        # 不调用 LLM 摘要
-        assert client.summarize.call_count == 0
-
-    async def test_escalate_to_tier2_after_limit(self, client):
-        """Tier 1 连续触发 3 次后升级到 Tier 2。"""
-        config = CompressionConfig(
-            tier1_ratio=0.5,
-            tier1_preserve_blocks=4,
-            tier1_escalation_limit=3,
+class TestCompactionTrigger:
+    async def test_trigger_compression(self, client):
+        """超过阈值时触发压缩，保留最近消息，旧消息变成摘要。"""
+        config = CompactionConfig(
+            reserve_tokens=1000,
+            keep_recent_tokens=2000,
+            summary_max_tokens=512,
         )
-        compressor = ContextCompressor(config)
-        messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="x" * 500),
-            Message(role="assistant", content="y" * 500),
-        ]
-        context_limit = _limit_for_ratio(messages, 0.6)
-
-        # 第 1、2 次仍应为 Tier 1
-        await compressor.compress_if_needed(messages, context_limit, client)
-        await compressor.compress_if_needed(messages, context_limit, client)
-        assert client.summarize.call_count == 0
-
-        # 第 3 次应升级到 Tier 2（摘要）
-        r3 = await compressor.compress_if_needed(messages, context_limit, client)
-        assert client.summarize.call_count == 1
-        assert any("摘要" in (m.content or "") for m in r3)
-
-    async def test_tier1_escalates_when_cannot_reduce(self, client):
-        """只剩一个非系统块时，Tier 1 无法丢块，应直接升级到 Tier 2。"""
-        config = CompressionConfig(tier1_ratio=0.5, tier1_preserve_blocks=4)
-        compressor = ContextCompressor(config)
-        messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="x" * 4000),
-        ]
-        context_limit = _limit_for_ratio(messages, 0.6)
-        result = await compressor.compress_if_needed(messages, context_limit, client)
+        compactor = ContextCompactor(config)
+        # 构造 30 条消息，每条约 100 + 4 = 104 tokens，共约 3120 tokens
+        messages = _make_messages(30, chars=400)
+        # 上下文 4000，阈值 4000 - 1000 = 3000，会触发
+        result = await compactor.compress_if_needed(messages, 4000, client)
 
         assert client.summarize.call_count == 1
-        assert any("摘要" in (m.content or "") for m in result)
+        # 结果应包含一条摘要消息 + 若干保留的最近消息
+        assert len(result) < len(messages)
+        assert any("[上下文摘要]" in (m.content or "") for m in result)
 
-
-class TestTier2Compression:
-    async def test_summarize_old_blocks(self, client):
-        config = CompressionConfig()
-        compressor = ContextCompressor(config)
+    async def test_preserve_system_messages(self, client):
+        """系统提示应始终保留。"""
+        config = CompactionConfig(
+            reserve_tokens=1000,
+            keep_recent_tokens=2000,
+            summary_max_tokens=512,
+        )
+        compactor = ContextCompactor(config)
         messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="a" * 500),
-            Message(role="assistant", content="b" * 500),
-            Message(role="user", content="c" * 500),
-            Message(role="assistant", content="d" * 500),
-        ]
-        # 比例落在 Tier 2 区间 [0.75, 0.9)
-        context_limit = _limit_for_ratio(messages, 0.8)
-        result = await compressor.compress_if_needed(messages, context_limit, client)
+            Message(role="system", content="system prompt"),
+        ] + _make_messages(10, chars=400)
 
-        assert client.summarize.call_count == 1
-        assert any("对话历史摘要" in (m.content or "") for m in result)
-        # 系统提示应保留
+        result = await compactor.compress_if_needed(messages, 3000, client)
+
         assert result[0].role == "system"
+        assert result[0].content == "system prompt"
 
-    async def test_tier2_when_blocks_less_than_preserve(self, client):
-        """Tier 2 在块数 ≤ preserve 时应只保留最近 1 个块，其余全摘要。"""
-        config = CompressionConfig(tier2_ratio=0.5, tier2_preserve_blocks=4)
-        compressor = ContextCompressor(config)
+
+class TestCutPoint:
+    async def test_tool_result_not_orphaned(self, client):
+        """切割点不能单独切在 toolResult 上，必须跟随 assistant。"""
+        config = CompactionConfig(
+            reserve_tokens=100,
+            keep_recent_tokens=50,
+            summary_max_tokens=512,
+        )
+        compactor = ContextCompactor(config)
         messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="a" * 1000),
-            Message(role="assistant", content="b" * 1000),
-        ]
-        context_limit = _limit_for_ratio(messages, 0.6)
-        result = await compressor.compress_if_needed(messages, context_limit, client)
-
-        assert client.summarize.call_count == 1
-        # 原始 user 块应被摘要替换
-        assert any("对话历史摘要" in (m.content or "") for m in result)
-        # 系统提示保留
-        assert result[0].role == "system"
-        # 块数不足时只保留最近 1 个完整块（assistant b）
-        assert any(m.content == "b" * 1000 for m in result)
-        assert not any(m.content == "a" * 1000 for m in result)
-
-
-class TestTier3Compression:
-    async def test_emergency_summarize(self, client):
-        config = CompressionConfig()
-        compressor = ContextCompressor(config)
-        messages = [
-            Message(role="system", content="sys"),
-            Message(role="user", content="a" * 500),
-            Message(role="assistant", content="b" * 500),
-            Message(role="user", content="c" * 500),
-            Message(role="assistant", content="d" * 500),
-        ]
-        # 比例落在 Tier 3 区间 [0.9, +∞)
-        context_limit = _limit_for_ratio(messages, 0.95)
-        result = await compressor.compress_if_needed(messages, context_limit, client)
-
-        assert client.summarize.call_count == 1
-        assert any("紧急摘要" in (m.content or "") for m in result)
-
-
-class TestBlockIntegrity:
-    async def test_tool_call_pair_kept_together(self, client):
-        """assistant + tool 消息应被划分为同一块，截断时成对保留或丢弃。"""
-        config = CompressionConfig(tier1_ratio=0.5, tier1_preserve_blocks=1)
-        compressor = ContextCompressor(config)
-        messages = [
-            Message(role="system", content="sys"),
             Message(role="user", content="q1"),
             Message(
                 role="assistant",
                 content="call tool",
-                tool_calls=[{"id": "c1", "type": "function", "function": {"name": "read", "arguments": "{}"}}],
+                tool_calls=[{"id": "c1", "type": "function", "function": {"name": "read", "arguments": '{"path": "/tmp/a"}'}}],
             ),
             Message(role="tool", content="result1", tool_call_id="c1"),
-            Message(role="user", content="q2" * 500),
+            Message(role="user", content="q2" * 500),  # 大消息确保触发压缩
         ]
-        context_limit = _limit_for_ratio(messages, 0.6)
-        result = await compressor.compress_if_needed(messages, context_limit, client)
+        # 触发压缩：q2*500 约 125 + 4 = 129 tokens，加上前面约 50 tokens，共约 179
+        # keep_recent=50，会从后往前累积，切点应落在 user q2 上，而不是 toolResult
+        result = await compactor.compress_if_needed(messages, 250, client)
 
-        # 保留 system + 最近 1 个块（q2）
-        assert len(result) == 2
-        assert result[0].role == "system"
-        assert result[1].content == "q2" * 500
+        raw_kept = [m for m in result if not (m.content or "").startswith("[上下文摘要]")]
+        # 如果保留了 tool，则它前面必须是 assistant
+        for i, m in enumerate(raw_kept):
+            if m.role == "tool":
+                assert raw_kept[i - 1].role == "assistant"
+
+    async def test_split_turn_generates_dual_summary(self, client):
+        """当切割点落在 Turn 中间时，应生成双摘要。"""
+        config = CompactionConfig(
+            reserve_tokens=100,
+            keep_recent_tokens=30,
+            summary_max_tokens=512,
+            turn_prefix_summary_max_tokens=256,
+        )
+        compactor = ContextCompactor(config)
+        messages = [
+            Message(role="user", content="previous question"),  # 历史 Turn
+            Message(role="assistant", content="previous answer"),
+            Message(role="user", content="user question"),      # 当前 Turn 起点
+            Message(role="assistant", content="assistant thinking..."),
+            Message(role="assistant", content="assistant answer" * 120),  # 大消息触发压缩
+        ]
+        # keep_recent=30，从后往前累积，会切在中间的 assistant 上，形成 split turn
+        result = await compactor.compress_if_needed(messages, 600, client)
+
+        # 双摘要会调用两次 summarize
+        assert client.summarize.call_count == 2
+        assert any("[上下文摘要]" in (m.content or "") for m in result)
+
+
+class TestFileOperations:
+    async def test_extract_read_and_modified_files(self, client):
+        """摘要中应包含文件操作记录。"""
+        config = CompactionConfig(
+            reserve_tokens=100,
+            keep_recent_tokens=50,
+            summary_max_tokens=512,
+        )
+        compactor = ContextCompactor(config)
+        messages = [
+            Message(role="user", content="read and edit"),
+            Message(
+                role="assistant",
+                content="",
+                tool_calls=[
+                    {"id": "c1", "type": "function", "function": {"name": "read", "arguments": '{"path": "/tmp/read.txt"}'}},
+                    {"id": "c2", "type": "function", "function": {"name": "edit", "arguments": '{"path": "/tmp/edit.txt"}'}},
+                ],
+            ),
+            Message(role="tool", content="content", tool_call_id="c1"),
+            Message(role="user", content="next" * 200),
+        ]
+        result = await compactor.compress_if_needed(messages, 300, client)
+
+        summary_msg = next(m for m in result if (m.content or "").startswith("[上下文摘要]"))
+        assert "/tmp/read.txt" in summary_msg.content
+        assert "/tmp/edit.txt" in summary_msg.content
 
 
 class TestStats:
     async def test_stats_recorded(self, client):
-        compressor = ContextCompressor()
+        compactor = ContextCompactor()
         messages = [Message(role="user", content="x" * 4000)]
-        context_limit = _limit_for_ratio(messages, 0.6)
-        await compressor.compress_if_needed(messages, context_limit, client)
+        await compactor.compress_if_needed(messages, 128000, client)
 
-        stats = compressor.get_stats()
+        stats = compactor.get_stats()
         assert stats["messages"] == len(messages)
-        assert stats["context_limit"] == context_limit
-        assert "ratio" in stats
+        assert stats["context_limit"] == 128000
+        assert "reserve_tokens" in stats
