@@ -28,7 +28,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from pi_agent.tools import ToolRegistry, ToolResult, create_default_registry
-from pi_agent_reference.context import CompressionConfig, ContextCompressor
+from pi_agent.context import CompressionConfig, ContextCompressor
 from pi_agent.llm import (
     LLMClient,
     LLMError,
@@ -72,7 +72,7 @@ class AgentConfig:
 
     # 压缩阈值
     tier1_ratio: float = 0.50
-    tier2_ratio: float = 0.70
+    tier2_ratio: float = 0.75
     tier3_ratio: float = 0.90
 
 

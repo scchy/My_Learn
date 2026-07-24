@@ -28,7 +28,7 @@ from pi_agent.llm import (
     StreamCancelledError,
     _messages_to_text,
     collect_deltas,
-    estimate_message_tokens,
+    estimate_messages_tokens,
     estimate_tokens,
 )
 
@@ -129,11 +129,11 @@ class TestEstimateTokens:
 
 class TestEstimateMessageTokens:
     def test_empty_list(self):
-        assert estimate_message_tokens([]) == 0
+        assert estimate_messages_tokens([]) == 0
 
     def test_single_message(self):
         msgs = [Message(role="user", content="hello")]  # 2 tokens + 4 overhead
-        assert estimate_message_tokens(msgs) == 6
+        assert estimate_messages_tokens(msgs) == 6
 
     def test_multiple_messages(self):
         msgs = [
@@ -141,7 +141,7 @@ class TestEstimateMessageTokens:
             Message(role="user", content="hi"),                 # 2 chars → 1 token
         ]
         # 4 + 1 + 2*4 = 13
-        assert estimate_message_tokens(msgs) == 13
+        assert estimate_messages_tokens(msgs) == 13
 
     def test_with_tool_calls(self):
         msgs = [
@@ -152,7 +152,7 @@ class TestEstimateMessageTokens:
             ),
         ]
         # content "ok" → 1, tool_calls JSON ≈ some tokens, overhead 4
-        tokens = estimate_message_tokens(msgs)
+        tokens = estimate_messages_tokens(msgs)
         assert tokens > 4  # at minimum overhead + content
 
 
