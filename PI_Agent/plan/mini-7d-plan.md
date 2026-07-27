@@ -288,9 +288,11 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 ---
 
 ### Day 5：会话持久化
+> Done 2026-07-27-13:53 | PI-AGENT Review & Fix 2026-07-27-13:59
 
-**文件**：`pi_agent/session.py`  
-**代码量**：~80 行  
+
+**文件**：`pi_agent/session.py`
+**代码量**：~100 行
 **核心机制**：JSONL 存储、会话树（parent_id）、书签标记
 
 **关键设计**：
@@ -306,10 +308,10 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 - Pi `/tree` 命令实现：[packages/coding-agent/src/commands/tree](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src/commands/tree)
 
 **验收标准**：
-- [ ] 会话保存/加载完整，数据不丢失
-- [ ] 支持分支（指定 parent_id 创建新节点）
-- [ ] 书签标记和检索正常
-- [ ] 自动保存（每轮后或手动触发）
+- [x] 会话保存/加载完整，数据不丢失
+- [x] 支持分支（指定 parent_id 创建新节点）
+- [x] 书签标记和检索正常
+- [x] 自动保存（每轮后或手动触发）—— CLI 层实现
 
 **预期踩坑**：JSONL 并发写会损坏文件，单进程 + `tempfile` 原子写
 
@@ -466,6 +468,10 @@ python -m pi_agent.cli chat --model gpt-4o-mini --api-key sk-xxx
 | 4 | 上下文压缩采用简单三级阈值，无 Turn 边界保护 | 🔴 | 重写为 Pi-style Compaction：绝对 token 预算驱动、从后往前找合法切割点、双摘要保护 Split Turn、文件操作追踪 | `context.py`, `pi_agent/compaction/*.py` |
 | 5 | CLI 缺少 --base-url，只能连 DeepSeek | 🟡 | CLI 增加 `--base-url` / `-b` 参数，支持任意 OpenAI 兼容端点 | `cli.py` |
 | 6 | JSONL 树遍历 O(n)，会话量大时变慢 | 🟡 | 启动时全量载入 `dict[str, SessionNode]`，退出时 tempfile 原子写回 | `session.py` |
+| 7 | `messages_from_node` 缺少 `ensure_loaded()`，未加载时永远返回 None | 🟡 | 补上 `self.ensure_loaded()` 调用 | `session.py` |
+| 8 | `save()` 未加载时调用会空写覆盖文件，数据全部丢失 | 🔴 | 加 `_loaded` guard，未加载时抛 `RuntimeError` | `session.py` |
+| 9 | `load()` 静默吞异常，损坏行无声丢失 | 🟡 | 改用 `logger.warning` 记录跳过原因和行内容 | `session.py` |
+| 10 | `bookmark_node()` 书签名去重限制过严，需允许多节点同名 | 🟢 | 移除去重检查，`get_by_bookmark` 返回首个匹配 | `session.py` |
 
 ## 十一、最终交付物
 
