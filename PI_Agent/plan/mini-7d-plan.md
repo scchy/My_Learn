@@ -322,7 +322,7 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 ---
 
 ### Day 6：CLI 外壳
-> Done 2026-07-28-14:36 | Review & Optimize 2026-07-28
+> Done 2026-07-28-14:36 | Review & Optimize 2026-07-28-15:36 
 > 学会了typer 命令解析，构建harness: client, Tools, Agent(包含context)+Config, Session
 > 
 **文件**：`pi_agent/cli.py`  
