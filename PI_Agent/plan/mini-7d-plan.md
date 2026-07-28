@@ -62,10 +62,10 @@ pi-agent-mini/
 │   ├── __init__.py          # 包入口
 │   ├── llm.py               # Day 1: 统一 LLM 客户端 (~80行)
 │   ├── tools.py             # Day 2: 工具注册与执行 (~100行)
-│   ├── agent.py             # Day 3: Agent Loop 核心 (~150行)
+│   ├── agent.py             # Day 3: Agent Loop 核心 (~250行)
 │   ├── context.py           # Day 4: 上下文压缩 (~80行)
-│   ├── session.py           # Day 5: 会话持久化 (~80行)
-│   └── cli.py               # Day 6: CLI 入口 (~100行)
+│   ├── session.py           # Day 5: 会话持久化 (~180行)
+│   └── cli.py               # Day 6: CLI 入口 (~380行)
 ├── tests/
 │   ├── test_llm.py          # Day 7: LLM 模块测试
 │   ├── test_tools.py        # Day 7: 工具模块测试
@@ -75,7 +75,7 @@ pi-agent-mini/
 └── README.md
 ```
 
-**总代码量**：~900 行核心代码 + ~100 行测试代码
+**总代码量**：~1,400 行核心代码 + ~100 行测试代码
 
 > **参考实现**：`/home/scc/sccWork/myGitHub/My_Learn/PI_Agent/pi_agent_reference/` 下的 7 个文件
 > 是修正后的完整实现，可直接运行。修正要点见附录 [十、关键修正记录]。
@@ -292,7 +292,7 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 
 
 **文件**：`pi_agent/session.py`
-**代码量**：~100 行
+**代码量**：~180 行
 **核心机制**：JSONL 存储、会话树（parent_id）、书签标记
 
 **关键设计**：
@@ -318,17 +318,55 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 ---
 
 ### Day 6：CLI 外壳
+> Done 2026-07-28-14:36 | Review & Optimize 2026-07-28
 
 **文件**：`pi_agent/cli.py`  
-**代码量**：~100 行  
-**核心机制**：typer 命令解析、rich 交互、配置优先级、/save 命令
+**代码量**：~380 行  
+**核心机制**：typer 命令解析、rich 交互、配置优先级、/save /exit 命令、会话 metadata 存取
 
 **关键设计**：
-- `chat` 命令：支持交互模式（无参数）和非交互模式（带 prompt 参数）
-- 配置优先级：**命令行参数 > 配置文件 > 环境变量**
-- 配置文件路径：`~/.pi-agent/config.yaml`
-- 交互模式支持 `/save <name>` 保存会话
-- `resume` 子命令：按书签名恢复会话
+
+#### 命令入口
+- `chat` 命令：支持交互模式（无 prompt 参数）和非交互模式（带 prompt 参数）
+- `resume` 子命令：按书签名恢复会话，支持 `--max-turns` 覆盖
+
+#### 配置优先级
+```
+CLI 参数 > 配置文件 (~/.pi-agent/config.yaml) > 环境变量 > 硬编码默认值
+```
+- `resolve_kwargs()` 按优先级逐层合并 api_key / base_url / model / max_turns 等参数
+- API Key：`--api-key` > `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` > config.yaml
+- Base URL：`--base-url` > `OPENAI_BASE_URL` > config.yaml > `https://api.deepseek.com`
+- Model：`--model` > config.yaml > `deepseek-chat`
+
+#### 共享初始化工厂
+- `_build_agent_and_store(kwargs)`：统一创建 LLMClient → ToolRegistry → AgentConfig → Agent → SessionStore 的完整链路，`chat` 和 `resume` 复用，消除重复代码
+- `_agent_metadata(agent)`：提取 `model` / `max_turns` / `context_limit` 作为会话节点元数据，随 `/save` 和 `/exit` 持久化到 SessionNode.metadata
+
+#### 交互模式命令
+
+| 命令 | 功能 |
+|:---|:---|
+| `/save <name>` | 保存当前会话为书签节点（附带 agent metadata） |
+| `/bookmarks` | 列出所有书签，当前节点标记 ★ |
+| `/stats` | 查看上下文统计：轮次、消息数、Token 估算、使用率 |
+| `/exit` 或 `/quit` | 保存当前状态为新节点，打印 node_id + 文件路径，退出 |
+| `/help` | 显示帮助 |
+
+#### 会话 metadata 存取
+- **保存时**：`/save`、`/exit`、非交互模式自动保存均通过 `_agent_metadata(agent)` 将运行配置写入 `SessionNode.metadata`
+- **恢复时**：`resume` 命令从 `node.metadata` 读取 `max_turns` / `context_limit` / `model`，优先级为：**CLI 显式传入 > 存储 metadata > config 文件 > 默认值**
+
+#### 异常处理
+- API Key 缺失：红色提示 + 三种配置方式说明
+- 书签不存在：列出所有可用书签供选择
+- 交互模式 `agent.run()` 异常：捕获后打印错误并 `continue`，不退出循环
+- `KeyboardInterrupt` / `EOFError`：友好退出
+
+#### 优化点（相比初版计划）
+- `agent.turn_count` property 替代 `agent._turn_count` 私有属性访问
+- `SessionStore._dirty` 标记：`/save` 后 `/exit` 只触发一次全量写回
+- `resume` 新增 `--max-turns` CLI 参数，补全 `--model` `--api-key` `--base-url` `--no-confirm`
 
 **参考源码**：
 - Pi CLI 入口：[packages/coding-agent/src/cli](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src/cli)
@@ -339,23 +377,29 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 
 ```bash
 # 交互模式
-python -m pi_agent.cli chat --model gpt-4o-mini --api-key sk-xxx
+python -m pi_agent.cli chat --model deepseek-chat
 
 # 非交互模式（脚本自动化）
 python -m pi_agent.cli chat "请帮我写一个快速排序的 Python 代码"
 
-# 恢复会话
+# 恢复会话（按书签）
 python -m pi_agent.cli resume my-session
+
+# 恢复时覆盖 max_turns
+python -m pi_agent.cli resume my-session --max-turns 100
 ```
 
 **验收标准**：
-- [ ] 交互/非交互双模式正常
-- [ ] 配置加载优先级正确（命令行 > 配置 > 环境变量）
-- [ ] `/save` 命令可保存会话并打书签
-- [ ] `resume` 子命令可按书签恢复
-- [ ] 异常处理：API Key 缺失、网络错误等友好提示
+- [x] 交互/非交互双模式正常
+- [x] 配置加载优先级正确（CLI > 配置文件 > 环境变量）
+- [x] `/save` 命令可保存会话并打书签
+- [x] `/exit` 退出时保存 + 打印 node_id 和文件路径
+- [x] `resume` 子命令可按书签恢复，并从 metadata 还原 max_turns
+- [x] 异常处理：API Key 缺失、书签不存在、agent.run() 异常等友好提示
+- [x] 会话 metadata（model / max_turns / context_limit）随节点存取
+- [x] _dirty 标记避免重复全量写回
 
-**预期踩坑**：typer 是同步的，异步入口需用 `asyncio.run()` 包装
+**预期踩坑**：typer 同步入口 + `asyncio.run()` 包装异步 Agent 运行
 
 ---
 
@@ -472,6 +516,13 @@ python -m pi_agent.cli chat --model gpt-4o-mini --api-key sk-xxx
 | 8 | `save()` 未加载时调用会空写覆盖文件，数据全部丢失 | 🔴 | 加 `_loaded` guard，未加载时抛 `RuntimeError` | `session.py` |
 | 9 | `load()` 静默吞异常，损坏行无声丢失 | 🟡 | 改用 `logger.warning` 记录跳过原因和行内容 | `session.py` |
 | 10 | `bookmark_node()` 书签名去重限制过严，需允许多节点同名 | 🟢 | 移除去重检查，`get_by_bookmark` 返回首个匹配 | `session.py` |
+| 11 | CLI 有错误 import（`from re import L`、`from torch.optim...`）和拼写错误（`bold grean`、`\b`） | 🟡 | 清理 IDE 自动导入残留，修正 Rich 标记拼写 | `cli.py` |
+| 12 | `resume` 命令丢失 `max_turns` / `context_limit` 参数 | 🟡 | 补全 AgentConfig 参数，新增 `--max-turns` CLI 选项 | `cli.py` |
+| 13 | `/stats` 使用不存在的 `ratio` key，始终显示 `?` | 🟡 | 改为从 `estimated_tokens / context_limit` 动态计算百分比 | `cli.py` |
+| 14 | 交互模式 `agent.run()` 异常导致循环崩溃 | 🟡 | 加 try/except 捕获异常，打印错误并 continue | `cli.py` |
+| 15 | `/save` 和 `/exit` 每次触发全量写回 JSONL | 🟡 | SessionStore 新增 `_dirty` 标记，无变更跳过写入 | `session.py`, `cli.py` |
+| 16 | `resume` 无法还原保存时的 `max_turns` 配置 | 🟡 | SessionNode 新增 `metadata` 字段，存取 model/max_turns/context_limit | `session.py`, `cli.py` |
+| 17 | CLI 直接访问 `agent._turn_count` 私有属性 | 🟢 | Agent 新增 `turn_count` property，CLI 改用公开接口 | `agent.py`, `cli.py` |
 
 ## 十一、最终交付物
 

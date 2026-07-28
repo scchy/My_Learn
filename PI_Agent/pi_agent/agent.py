@@ -139,7 +139,12 @@ class Agent:
         
         # ---- 运行时状态 ----
         self._turn_count: int = 0    # 当前轮次计数
-        self._aborted: bool = False  # 是否已被用户中止 
+        self._aborted: bool = False  # 是否已被用户中止
+
+    @property
+    def turn_count(self) -> int:
+        """当前轮次计数（只读）。"""
+        return self._turn_count
 
     # ------------------------------------------------------------------
     # 主循环

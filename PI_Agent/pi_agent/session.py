@@ -1,6 +1,6 @@
 # Day 5: 会话持久化
 # python3
-# Create Date: 2026-07-21
+# Create Date: 2026-07-27
 # Author: Scc_hy
 # Tip:
 # 设计原则： 
@@ -40,6 +40,7 @@ class SessionNode:
     messages: list[dict[str, Any]] = field(default_factory=list)
     bookmark: str | None = None 
     created_at: str= ""
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.created_at:
@@ -63,7 +64,8 @@ class SessionStore:
 
         self.filepath = Path(filepath)
         self._nodes: dict[str, SessionNode] = {}
-        self._loaded = False 
+        self._loaded = False
+        self._dirty = False 
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -86,16 +88,20 @@ class SessionStore:
                             messages=data.get("messages", []),
                             bookmark=data.get("bookmark"),
                             created_at=data.get("created_at", ""),
+                            metadata=data.get("metadata", {}),
                         )
                         self._nodes[node.id] = node
                     except (json.JSONDecodeError, KeyError) as e:
                         logger.warning("跳过损坏的会话行: %s (行内容: %.80s)", e, line[:80])
-        self._loaded = True 
+        self._loaded = True
+        self._dirty = False
     
     def save(self) -> None:
         """
-        将内存中的全部节点原子写回 JSONL。
+        将内存中的全部节点原子写回 JSONL（仅在 dirty 时写入）。
         """
+        if not self._dirty:
+            return
         if not self._loaded:
             raise RuntimeError(
                 "SessionStore 尚未加载数据，禁止 save() 以免空写覆盖现有文件。"
@@ -118,9 +124,11 @@ class SessionStore:
                         "messages": node.messages,
                         "bookmark": node.bookmark,
                         "created_at": node.created_at,
+                        "metadata": node.metadata,
                     }, ensure_ascii=False)
                     f.write(line + "\n")
             os.replace(tmp_path, str(self.filepath))
+            self._dirty = False
         except Exception:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
@@ -139,7 +147,8 @@ class SessionStore:
         messages: list[Message],
         *,
         parent_id: str | None = None, 
-        bookmark: str | None = None 
+        bookmark: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SessionNode:
         """创建新会话节点。"""
         self.ensure_loaded()
@@ -148,8 +157,10 @@ class SessionStore:
             parent_id=parent_id,
             messages=[_message_to_dict(m) for m in messages],
             bookmark=bookmark,
+            metadata=metadata or {},
         )
         self._nodes[node.id] = node
+        self._dirty = True
         return node
 
     def update_node(self, node_id: str, messages: list[Message]) -> SessionNode | None:
@@ -159,6 +170,7 @@ class SessionStore:
         if node is None:
             return None 
         node.messages = [_message_to_dict(m) for m in messages]
+        self._dirty = True
         return node 
     
     def bookmark_node(self, node_id: str, name: str) -> bool: 
@@ -170,6 +182,7 @@ class SessionStore:
         if node is None:
             return False
         node.bookmark = name
+        self._dirty = True
         return True
 
     def get_node(self, node_id: str) -> SessionNode | None:
