@@ -172,14 +172,22 @@ def chat(
 
     agent, store = _build_agent_and_store(kwargs)
 
+    # 启动提示：显示最近书签
+    bookmarks = store.list_bookmarks()
+    last_hint = ""
+    if bookmarks:
+        name, nid = bookmarks[-1]
+        last_hint = f"\n最近书签: [cyan]{name}[/cyan] → {nid}\n恢复: pi-agent resume {name}"
+
     console.print(
         Panel.fit(
             f"[bold]Pi Agent Mini[/bold]\n"
             f"模型: {kwargs['model']}\n"
             f"API: {kwargs['base_url']}\n"
             f"最大轮次: {kwargs['max_turns']}\n"
-            f"危险确认: {'开启' if kwargs['confirm_dangerous'] else '关闭'}\n"
-            f"命令: /save <name> 保存 | /exit 退出 | /stats 上下文统计",
+            f"危险确认: {'开启' if kwargs['confirm_dangerous'] else '关闭'}"
+            f"{last_hint}\n"
+            f"命令: /save <name> 打书签 | /exit 退出 | /stats 统计",
             title="启动信息",
         )
     )
@@ -222,14 +230,26 @@ def resume(
     store = SessionStore()
     store.load()
 
+    # 先按书签查找，再按节点 ID 查找（书签是用户主动命名的，优先匹配）
     node = store.get_by_bookmark(bookmark)
     if node is None:
-        console.print(f"[red]错误: 未找到书签 '{bookmark}'[/red]")
+        node = store.get_node(bookmark)
+
+    if node is None:
+        console.print(f"[red]错误: 未找到节点或书签 '{bookmark}'[/red]")
+        # 列出所有书签
         bookmarks = store.list_bookmarks()
         if bookmarks:
             console.print("\n可用书签:")
             for name, nid in bookmarks:
                 console.print(f"  [cyan]{name}[/cyan] → {nid}")
+        # 也列出最近的根节点供参考
+        roots = store.list_roots()
+        if roots:
+            console.print("\n最近的根节点:")
+            for n in roots[-5:]:
+                marker = f" [dim]({n.bookmark})[/dim]" if n.bookmark else ""
+                console.print(f"  {n.id}{marker}  {n.created_at[:16]}")
         raise typer.Exit(1)
 
     # 从存储的 metadata 恢复运行参数（CLI 显式传入优先，否则用存储值）
@@ -246,6 +266,7 @@ def resume(
 
     agent, _ = _build_agent_and_store(kwargs)
     agent.messages = messages  # 恢复历史
+    agent.current_node_id = node.id  # 绑定到已有节点
 
     console.print(
         Panel.fit(
@@ -258,7 +279,7 @@ def resume(
         )
     )
 
-    asyncio.run(_run_interactive(agent, store, current_node_id=node.id))
+    asyncio.run(_run_interactive(agent, store))
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +300,7 @@ async def _run_non_interactive(
     
     # 自动保存（附带运行配置元数据）
     node = store.create_node(agent.messages, metadata=_agent_metadata(agent))
+    agent.current_node_id = node.id
     store.save()
     console.print(f"[dim]会话已自动保存：{node.id}[/dim]")
     
@@ -286,14 +308,35 @@ async def _run_non_interactive(
 async def _run_interactive(
     agent: Agent,
     store: SessionStore,
-    current_node_id: str | None = None
 ):
-    """交互模式：持续对话，支持 /save、/exit、/stats 命令。"""
+    """交互模式：持续对话，支持 /save、/exit、/stats 命令。
+    
+    /save 打书签（不创建新节点），/exit 自动保存。
+    """
+
+    def _save_current_state():
+        """将 agent.messages 同步到当前节点（存在则更新，否则创建）。"""
+        if agent.current_node_id is None:
+            node = store.create_node(
+                agent.messages,
+                metadata=_agent_metadata(agent),
+            )
+            agent.current_node_id = node.id
+            return node
+        else:
+            store.update_node(agent.current_node_id, agent.messages)
+            return store.get_node(agent.current_node_id)
+
     while True:
         try:
             user_input = Prompt.ask("\n[bold blue]你[/bold blue]").strip()
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]再见！[/dim]")
+            if agent.messages:
+                node = _save_current_state()
+                console.print(f"[yellow]自动保存会话: {node.id}[/yellow]")
+            store.save()
+            console.print(f"[dim]存储位置: {store.filepath}[/dim]")
             break
 
         # 处理命令
@@ -303,31 +346,36 @@ async def _run_interactive(
             arg = parts[1] if len(parts) > 1 else ""
             
             if cmd == "/exit" or cmd == '/quit':
-                node = store.create_node(
-                    agent.messages,
-                    parent_id=current_node_id,
-                    metadata=_agent_metadata(agent),
-                )
+                if agent.messages:
+                    node = _save_current_state()
+                    console.print(f"[dim]会话已保存: {node.id}[/dim]")
+                    console.print(f"[dim]恢复: pi-agent resume {node.id}[/dim]")
                 store.save()
-                console.print(f"[dim]会话已保存: {node.id}[/dim]")
                 console.print(f"[dim]存储位置: {store.filepath}[/dim]")
                 break
             elif cmd == '/save':
                 name = arg or "auto"
-                node = store.create_node(
-                    agent.messages,
-                    parent_id=current_node_id,
-                    bookmark=name,
-                    metadata=_agent_metadata(agent),
-                )
-                current_node_id = node.id
+                if agent.current_node_id is None:
+                    # 首次保存：创建节点 + 打书签
+                    node = store.create_node(
+                        agent.messages,
+                        bookmark=name,
+                        metadata=_agent_metadata(agent),
+                    )
+                    agent.current_node_id = node.id
+                    console.print(f"[green]✓ 已保存: {name} ({node.id})[/green]")
+                    console.print(f"[dim]恢复: pi-agent resume {name} 或 pi-agent resume {node.id}[/dim]")
+                else:
+                    # 已有节点：更新消息 + 打书签
+                    store.update_node(agent.current_node_id, agent.messages)
+                    store.bookmark_node(agent.current_node_id, name)
+                    console.print(f"[green]✓ 书签已更新: {name} ({agent.current_node_id})[/green]")
                 store.save()
-                console.print(f"[green]✓ 已保存: {name} ({node.id})[/green]")
             elif cmd == '/bookmarks':
                 bookmarks = store.list_bookmarks()
                 if bookmarks:
                     for name, nid in bookmarks:
-                        marker = " ★" if nid == current_node_id else ""
+                        marker = " ★" if nid == agent.current_node_id else ""
                         console.print(f'  [cyan]{name}[/cyan] → {nid}{marker}')
                 else:
                     console.print("[dim]暂无书签[/dim]")
@@ -345,7 +393,7 @@ async def _run_interactive(
             elif cmd == '/help':
                 console.print("""
 [bold]可用命令:[/bold]
-  /save <name>  - 保存当前会话（可选书签名）
+  /save <name>  - 打书签（不创建新节点）
   /bookmarks    - 列出所有书签
   /stats        - 查看上下文统计
   /exit         - 保存并退出

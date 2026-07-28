@@ -86,6 +86,7 @@ pi-agent-mini/
 
 ### Day 1：统一 LLM 客户端
 > Done 2026-07-22-01:06
+> 学会了sse流式数据捕捉与中断，组合返回
 
 **文件**：`pi_agent/llm.py`  
 **代码量**：~80 行  
@@ -116,6 +117,7 @@ pi-agent-mini/
 
 ### Day 2：工具系统
 > Done 2026-07-22-20:03
+> 学会了一些最为基本的工具
 > 
 **文件**：`pi_agent/tools.py`  
 **代码量**：~100 行  
@@ -158,6 +160,7 @@ pi-agent-mini/
 
 ### Day 3：Agent Loop 核心
 > Done 2026-07-23-15:45
+> 学会了ReAct循环 工具执行
 > 
 **文件**：`pi_agent/agent.py`  
 **代码量**：~150 行  
@@ -196,6 +199,7 @@ pi-agent-mini/
 
 ### Day 4：上下文压缩
 > Done 2026-07-24-17:13 | New Fix 2026-07-25-00:24
+> 学会了Pi-agent的简单压缩: 基于保留的token数找切割点，压缩切割点前的messages（tool使用的完整块）摘要中保留文件操作轨迹 + 剩余messages
 > 
 **文件**：`pi_agent/context.py`  
 **代码量**：~80 行  
@@ -289,7 +293,7 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 
 ### Day 5：会话持久化
 > Done 2026-07-27-13:53 | PI-AGENT Review & Fix 2026-07-27-13:59
-
+> 学会了全部保留到一个JSONL文件，会话树
 
 **文件**：`pi_agent/session.py`
 **代码量**：~180 行

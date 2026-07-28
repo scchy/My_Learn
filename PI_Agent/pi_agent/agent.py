@@ -140,6 +140,7 @@ class Agent:
         # ---- 运行时状态 ----
         self._turn_count: int = 0    # 当前轮次计数
         self._aborted: bool = False  # 是否已被用户中止
+        self.current_node_id: str | None = None  # 当前对话对应的会话节点 ID
 
     @property
     def turn_count(self) -> int:

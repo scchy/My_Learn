@@ -55,8 +55,10 @@ class SessionNode:
 class SessionStore:
     """JSONAL 持久化的会话存储
     
-    启动时全量载入到内存中的 dict, 操作都是 O(1)
-    退出时全量写回 JSONL(通过临时文件原子写入)
+    启动时全量载入到内存中的 dict, 操作都是 O(1)。
+    写入策略：
+    - 仅新增节点 → append-only（O(新节点数)，零重写开销）
+    - 有修改节点 → 全量原子重写（tempfile + rename）
     """
     def __init__(self, filepath: str = ""):
         if not filepath:
@@ -65,7 +67,9 @@ class SessionStore:
         self.filepath = Path(filepath)
         self._nodes: dict[str, SessionNode] = {}
         self._loaded = False
-        self._dirty = False 
+        self._dirty = False
+        self._new_ids: set[str] = set()         # 自上次 save 后创建的新节点
+        self._modified_ids: set[str] = set()     # 自上次 save 后修改的已有节点 
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -95,10 +99,14 @@ class SessionStore:
                         logger.warning("跳过损坏的会话行: %s (行内容: %.80s)", e, line[:80])
         self._loaded = True
         self._dirty = False
+        self._new_ids.clear()
+        self._modified_ids.clear()
     
     def save(self) -> None:
         """
-        将内存中的全部节点原子写回 JSONL（仅在 dirty 时写入）。
+        持久化内存中的节点。
+        - 仅新增 → append-only 追加到文件末尾
+        - 有修改 → 全量原子重写（tempfile + rename）
         """
         if not self._dirty:
             return
@@ -108,8 +116,38 @@ class SessionStore:
                 "请先调用 load()。"
             )
         self.filepath.parent.mkdir(parents=True, exist_ok=True)
-        
-        # 写到临时文件，然后原子 rename
+
+        if self._modified_ids:
+            # 有修改 → 全量重写
+            self._full_rewrite()
+        elif self._new_ids:
+            # 仅新增 → append-only
+            self._append_new()
+
+        self._dirty = False
+        self._new_ids.clear()
+        self._modified_ids.clear()
+
+    def _node_to_line(self, node: SessionNode) -> str:
+        """将节点序列化为一行 JSON。"""
+        return json.dumps({
+            "id": node.id,
+            "parent_id": node.parent_id,
+            "messages": node.messages,
+            "bookmark": node.bookmark,
+            "created_at": node.created_at,
+            "metadata": node.metadata,
+        }, ensure_ascii=False)
+
+    def _append_new(self) -> None:
+        """Append-only：将新节点追加到 JSONL 文件末尾。"""
+        with open(self.filepath, 'a', encoding='utf-8') as f:
+            for nid in self._new_ids:
+                node = self._nodes[nid]
+                f.write(self._node_to_line(node) + "\n")
+
+    def _full_rewrite(self) -> None:
+        """全量原子重写：写入临时文件后 rename。"""
         fd, tmp_path = tempfile.mkstemp(
             dir=str(self.filepath.parent),
             prefix='.sessions_',
@@ -118,17 +156,8 @@ class SessionStore:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 for node in self._nodes.values():
-                    line = json.dumps({
-                        "id": node.id,
-                        "parent_id": node.parent_id,
-                        "messages": node.messages,
-                        "bookmark": node.bookmark,
-                        "created_at": node.created_at,
-                        "metadata": node.metadata,
-                    }, ensure_ascii=False)
-                    f.write(line + "\n")
+                    f.write(self._node_to_line(node) + "\n")
             os.replace(tmp_path, str(self.filepath))
-            self._dirty = False
         except Exception:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
@@ -161,6 +190,7 @@ class SessionStore:
         )
         self._nodes[node.id] = node
         self._dirty = True
+        self._new_ids.add(node.id)
         return node
 
     def update_node(self, node_id: str, messages: list[Message]) -> SessionNode | None:
@@ -171,6 +201,8 @@ class SessionStore:
             return None 
         node.messages = [_message_to_dict(m) for m in messages]
         self._dirty = True
+        if node_id not in self._new_ids:
+            self._modified_ids.add(node_id)
         return node 
     
     def bookmark_node(self, node_id: str, name: str) -> bool: 
@@ -183,6 +215,8 @@ class SessionStore:
             return False
         node.bookmark = name
         self._dirty = True
+        if node_id not in self._new_ids:
+            self._modified_ids.add(node_id)
         return True
 
     def get_node(self, node_id: str) -> SessionNode | None:
