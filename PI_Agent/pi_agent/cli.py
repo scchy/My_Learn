@@ -324,8 +324,15 @@ async def _run_interactive(
             agent.current_node_id = node.id
             return node
         else:
-            store.update_node(agent.current_node_id, agent.messages)
-            return store.get_node(agent.current_node_id)
+            node = store.update_node(agent.current_node_id, agent.messages)
+            if node is None:
+                console.print("[yellow]警告: 当前会话节点已丢失，创建新节点[/yellow]")
+                node = store.create_node(
+                    agent.messages,
+                    metadata=_agent_metadata(agent),
+                )
+                agent.current_node_id = node.id
+            return node
 
     while True:
         try:
@@ -367,9 +374,19 @@ async def _run_interactive(
                     console.print(f"[dim]恢复: pi-agent resume {name} 或 pi-agent resume {node.id}[/dim]")
                 else:
                     # 已有节点：更新消息 + 打书签
-                    store.update_node(agent.current_node_id, agent.messages)
-                    store.bookmark_node(agent.current_node_id, name)
+                    node = store.update_node(agent.current_node_id, agent.messages)
+                    if node is None:
+                        console.print("[yellow]警告: 当前会话节点已丢失，创建新节点[/yellow]")
+                        node = store.create_node(
+                            agent.messages,
+                            bookmark=name,
+                            metadata=_agent_metadata(agent),
+                        )
+                        agent.current_node_id = node.id
+                    else:
+                        store.bookmark_node(agent.current_node_id, name)
                     console.print(f"[green]✓ 书签已更新: {name} ({agent.current_node_id})[/green]")
+                    console.print(f"[dim]恢复: pi-agent resume {name} 或 pi-agent resume {agent.current_node_id}[/dim]")
                 store.save()
             elif cmd == '/bookmarks':
                 bookmarks = store.list_bookmarks()

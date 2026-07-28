@@ -323,7 +323,8 @@ ratio ≥ 0.90 → Tier 3：紧急压缩
 
 ### Day 6：CLI 外壳
 > Done 2026-07-28-14:36 | Review & Optimize 2026-07-28
-
+> 学会了typer 命令解析，构建harness: client, Tools, Agent(包含context)+Config, Session
+> 
 **文件**：`pi_agent/cli.py`  
 **代码量**：~380 行  
 **核心机制**：typer 命令解析、rich 交互、配置优先级、/save /exit 命令、会话 metadata 存取
@@ -407,7 +408,7 @@ python -m pi_agent.cli resume my-session --max-turns 100
 
 ---
 
-### Day 7：整合测试
+### Day 7：整合测试 & 按照理解简单描述
 
 **文件**：`tests/*.py`（4 个文件）  
 **代码量**：~100 行测试代码  

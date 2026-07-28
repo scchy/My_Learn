@@ -194,16 +194,16 @@ class SessionStore:
         return node
 
     def update_node(self, node_id: str, messages: list[Message]) -> SessionNode | None:
-        """ 更新节点的消息列表 """
+        """更新节点的消息列表，返回更新后的节点（或 None 表示节点不存在）"""
         self.ensure_loaded()
         node = self._nodes.get(node_id)
         if node is None:
-            return None 
+            return None
         node.messages = [_message_to_dict(m) for m in messages]
         self._dirty = True
         if node_id not in self._new_ids:
             self._modified_ids.add(node_id)
-        return node 
+        return node
     
     def bookmark_node(self, node_id: str, name: str) -> bool: 
         """ 
