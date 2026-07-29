@@ -408,11 +408,15 @@ python -m pi_agent.cli resume my-session --max-turns 100
 
 ---
 
-### Day 7：整合测试 & 按照理解简单描述
+### Day 7：整合测试
+> Done 2026-07-29 | 单元测试 203 全部通过 + 3 个真实 API 集成测试
+> 学会了：Mock SSE流模拟、async generator 在 pytest 中的正确 mock 方式、
+> Rich Panel 的 markup 陷阱（路径 [xxx] 被解析为 closing tag）、
+> Agent 全生命周期的边界覆盖（空输入/长文本/工具全失败/malformed args/并发独立）
 
 **文件**：`tests/*.py`（4 个文件）  
-**代码量**：~100 行测试代码  
-**核心机制**：单元测试 + 集成测试 + 边界测试
+**代码量**：~1,000 行测试代码  
+**核心机制**：单元测试 + 集成测试 + 边界测试 + 回归测试
 
 **参考源码**：
 - Pi 测试套件：[test.sh](https://github.com/earendil-works/pi/blob/main/test.sh)、[pi-test.sh](https://github.com/earendil-works/pi/blob/main/pi-test.sh)
@@ -421,27 +425,32 @@ python -m pi_agent.cli resume my-session --max-turns 100
 
 **测试清单**：
 
-#### 1. 单元测试（Mock）
+#### 1. 单元测试（Mock）— 实际结果
 
-| 测试文件 | 覆盖内容 | Mock 方式 |
-|:---|:---|:---|
-| `test_llm.py` | 流式输出、重试、token 估算 | Mock SSE 流，模拟 503 错误 |
-| `test_tools.py` | 7 个工具、危险确认、超时 | 直接调用，mock `Confirm.ask` |
-| `test_agent.py` | ReAct 循环、并行工具、steering | Mock LLM 返回 tool_calls |
-| `test_context.py` | 三层压缩触发 | 构造大消息列表，mock LLM 摘要 |
+| 测试文件 | 测试数 | 覆盖内容 | Mock 方式 |
+|:---|:---:|:---|:---|
+| `test_llm.py` | 59 | 流式输出、重试、token 估算、SSE 解析、Delta 累积、取消、chat_complete | Mock SSE 流，模拟 503 错误 |
+| `test_tools.py` | 102 | 7 个工具、危险确认、超时、Schema、注册/执行、集成链、边界 | 直接调用（tmp_path），mock 权限 |
+| `test_agent.py` | 35 | ReAct 循环、并行工具、steering、max_turns、LLM 错误、压缩集成 | Mock LLM 返回 tool_calls / 文本 / 错误流 |
+| `test_context.py` | 7 | 压缩触发、系统消息保留、切割点保护、双摘要、文件操作追踪 | 构造大消息列表，mock LLM 摘要 |
+| **总计** | **203** | | **全部通过** |
 
-#### 2. 集成测试（真实 API）
+#### 2. 集成测试（真实 API）— 实际结果
 
-- [ ] 用 `gpt-4o-mini` 或等效小模型跑简单任务
-- [ ] 测试："请读取当前目录的 README.md 并总结"
-- [ ] 测试："找出所有 .py 文件，搜索包含 'def main' 的文件"
+- [x] 测试："找出所有 .py 文件，搜索包含 'def main' 的文件" → ✅ find → grep，找到 `cli.py` 和 `cli_reference.py`
+- [x] 测试："读取 plan/mini-7d-plan.md 前 50 行并总结" → ✅ read → summarize，准确提取 5 点核心
+- [x] 测试："用 write 创建快速排序 Python 文件" → ✅ write `/tmp/pi_test_quicksort.py`，代码可运行正确
 
 #### 3. 边界测试
 
-- [ ] 流式中断：模拟网络断开，确认重试
-- [ ] 工具超时：`bash sleep 60`，确认 30s 超时返回
-- [ ] 上下文溢出：构造 1000 条消息，确认压缩不崩溃
-- [ ] 空输入：用户输入空字符串，确认不崩溃
+- [x] 流式中断：模拟网络断开，`TransportError` → 指数退避重试 → `RetryExhaustedError`
+- [x] 工具超时：`asyncio.wait_for(timeout=0.1)`，确认返回 `is_error=True` + 超时信息
+- [x] 上下文溢出：构造大消息列表，确认压缩触发、系统消息保留、tool 配对保护
+- [x] 空输入：用户输入空字符串，确认不崩溃
+- [x] 长输入：10,000 倍 "Hello " 输入，确认不崩溃
+- [x] 大文件 `read`（100K 行/10MB），确认偏移分页正常
+- [x] 工具全部失败：`asyncio.gather(return_exceptions=True)`，错误以 tool message 反馈给 LLM
+- [x] 并发 Agent：两个独立 Agent 并发运行，互不影响
 
 #### 4. 性能测试（可选）
 
@@ -449,9 +458,9 @@ python -m pi_agent.cli resume my-session --max-turns 100
 - [ ] 大文件 `read`（10MB），确认截断到 4000 字符
 
 **验收标准**：
-- [ ] 全部单元测试通过（Mock）
-- [ ] 集成测试用真实 API 跑通简单编码任务
-- [ ] 边界测试无崩溃
+- [x] 全部单元测试通过（Mock）— **203 / 203**
+- [x] 集成测试用真实 API 跑通简单编码任务 — **3 / 3**
+- [x] 边界测试无崩溃
 
 ---
 
@@ -528,11 +537,13 @@ python -m pi_agent.cli chat --model gpt-4o-mini --api-key sk-xxx
 | 15 | `/save` 和 `/exit` 每次触发全量写回 JSONL | 🟡 | SessionStore 新增 `_dirty` 标记，无变更跳过写入 | `session.py`, `cli.py` |
 | 16 | `resume` 无法还原保存时的 `max_turns` 配置 | 🟡 | SessionNode 新增 `metadata` 字段，存取 model/max_turns/context_limit | `session.py`, `cli.py` |
 | 17 | CLI 直接访问 `agent._turn_count` 私有属性 | 🟢 | Agent 新增 `turn_count` property，CLI 改用公开接口 | `agent.py`, `cli.py` |
+| 18 | `build_agent()` 中 `AgentConfig.system_prompt` 类属性不存在（dataclass 的 `default_factory` 不创建类属性）| 🔴 | 改为 `AgentConfig().system_prompt`（先实例化再访问实例字段）| `agent.py` |
+| 19 | 工具输出含 `[路径]` 时 Rich Panel 误解析为 markup closing tag → `MarkupError` 崩溃 | 🔴 | `_execute_tools()` 的 Panel 内容改用 `Text.assemble()` 构建，避免路径中的 `[...]` 被误解析 | `agent.py` |
 
 ## 十一、最终交付物
 
-- [ ] 7 个 Python 文件，~900 行核心代码
-- [ ] 可运行的 CLI（交互 + 非交互）
-- [ ] 完整的测试套件（单元 + 集成 + 边界）
-- [ ] 对 Agent Loop、流式 LLM、工具调用、上下文压缩的"肌肉记忆"级理解
-- [ ] 可直接迁移到 HyperTuneAgent / 评估体系设计中的工程经验
+- [x] 7 个 Python 文件 + 4 个 compaction 子模块，~1,100 行核心代码
+- [x] 可运行的 CLI（交互 + 非交互 + resume 恢复）
+- [x] 完整的测试套件：203 单元测试 + 3 集成测试 + 全面边界覆盖
+- [x] 对 Agent Loop、流式 LLM、工具调用、上下文压缩的"肌肉记忆"级理解
+- [x] 可直接迁移到 HyperTuneAgent / 评估体系设计中的工程经验

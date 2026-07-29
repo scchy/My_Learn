@@ -380,9 +380,15 @@ class Agent:
             label = "✓" if not tr.is_error else "✗"
             style = "green" if not tr.is_error else "red"
             preview = tr.output[:300].replace("\n", " ")
+            # 用 rich.Text 包装避免路径中的 [...] 被误解析为 markup
+            body = Text.assemble(
+                (f"{label} {name}\n", f"bold {style}"),
+                (preview, style),
+                ("..." if len(tr.output) > 300 else "", style),
+            )
             self.console.print(
                 Panel(
-                    f"[bold]{label} {name}[/bold]\n{preview}{'...' if len(tr.output) > 300 else ''}",
+                    body,
                     style=style,
                     title=f"tool: {name}",
                 )
@@ -418,7 +424,7 @@ def build_agent(
         model=model,
         max_turns=max_turns,
         context_limit=context_limit,
-        system_prompt=system_prompt or AgentConfig.system_prompt,
+        system_prompt=system_prompt or AgentConfig().system_prompt,
     )
     client = LLMClient(api_key=api_key, base_url=base_url, model=model)
     tools = create_default_registry()
