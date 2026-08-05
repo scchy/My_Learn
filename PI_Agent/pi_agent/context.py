@@ -19,7 +19,11 @@ import logging
 from dataclasses import dataclass
 
 from pi_agent.llm import LLMClient, Message
-from pi_agent.compaction.cutpoint import find_cut_point, find_turn_start_index
+from pi_agent.compaction.cutpoint import (
+    _is_compaction_summary,
+    find_cut_point,
+    find_turn_start_index,
+)
 from pi_agent.compaction.fileops import extract_file_operations
 from pi_agent.compaction.summary import (
     create_compaction_summary_message,
@@ -52,6 +56,34 @@ class CompactionConfig:
 
 # 保留旧别名，避免已有导入失效
 CompressionConfig = CompactionConfig
+
+
+# ---------------------------------------------------------------------------
+# 增量摘要：提取上一次压缩的摘要文本
+# ---------------------------------------------------------------------------
+
+
+def _extract_previous_summary(
+    messages: list[Message], cut_index: int
+) -> tuple[str | None, int]:
+    """从待压缩的消息中提取上一次的 compaction 摘要。
+
+    从 cut_index 向前扫描，找到最近的 ``[上下文摘要]`` 消息，
+    提取其正文作为 previous_summary，用于增量更新（UPDATE_SUMMARIZATION_PROMPT）。
+
+    Returns
+    -------
+    (summary_text, message_index)
+        若未找到，返回 (None, 0)。message_index 用于跳过旧摘要，
+        只把摘要之后的新消息传给 LLM。
+    """
+    for i in range(cut_index - 1, -1, -1):
+        if _is_compaction_summary(messages[i]):
+            content = messages[i].content or ""
+            # 去掉 ``[上下文摘要]`` 前缀，保留纯文本
+            summary_text = content.replace("[上下文摘要]", "", 1).strip()
+            return summary_text, i
+    return None, 0
 
 
 # ---------------------------------------------------------------------------
@@ -127,17 +159,24 @@ class ContextCompactor:
         # Stage 3/4: 生成摘要
         turn_start = find_turn_start_index(non_system, cut_index)
 
+        # ── 增量摘要：检测上一次压缩摘要，避免全量重写 ──
+        previous_summary, prev_summary_idx = _extract_previous_summary(
+            non_system, cut_index
+        )
+        # 如果有旧摘要，只对摘要之后的新消息做增量更新（而不是重读全部历史）
+        history_start = prev_summary_idx + 1 if previous_summary else 0
+
         if is_split_turn:
             # 双摘要：历史摘要 + 当前 Turn 前缀摘要
-            history_messages = non_system[:turn_start]
+            history_messages = non_system[history_start:turn_start]
             turn_prefix_messages = non_system[turn_start:cut_index]
 
             history_summary = ""
-            if history_messages:
+            if history_messages or previous_summary:
                 history_summary = await generate_summary(
                     client,
                     history_messages,
-                    previous_summary=None,
+                    previous_summary=previous_summary,
                     max_tokens=self.config.summary_max_tokens,
                 )
 
@@ -148,14 +187,16 @@ class ContextCompactor:
             )
 
             summary_text = merge_summaries(history_summary, turn_prefix_summary)
-            compacted_messages = non_system[:turn_start]
+            # 文件追踪以全部被压缩消息为准（含旧摘要）
+            compacted_messages = non_system[:cut_index]
         else:
             # 单摘要：切割点正好在 Turn 边界
             compacted_messages = non_system[:cut_index]
+            new_messages = non_system[history_start:cut_index]
             summary_text = await generate_summary(
                 client,
-                compacted_messages,
-                previous_summary=None,
+                new_messages,
+                previous_summary=previous_summary,
                 max_tokens=self.config.summary_max_tokens,
             )
 
@@ -165,8 +206,9 @@ class ContextCompactor:
 
         result = system_msgs + [summary_msg] + kept_raw
         logger.info(
-            "Compaction: compressed %d non-system messages into summary, kept %d raw",
+            "Compaction: compressed %d non-system messages into summary (incremental=%s), kept %d raw",
             len(non_system),
+            previous_summary is not None,
             len(kept_raw),
         )
         return result
