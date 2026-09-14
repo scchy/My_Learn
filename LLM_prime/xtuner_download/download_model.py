@@ -137,6 +137,8 @@ class xtunerModelDownload():
 
     def hf_download(self):
         print('>>>>>>> Start hf_download')
+        # 0- token 可选：TOKEN 为空时不拼 --token（匿名下载）
+        token_arg = f'--token {TOKEN}' if TOKEN else ''
         # 1- mid download local dir
         self.mid_download_dir = self.final_out_path   
         # 2- download 
@@ -146,7 +148,7 @@ class xtunerModelDownload():
         --repo-type model \
         --local-dir {self.final_out_path} \
         --cache-dir {self.final_out_path}/cache \
-        --token {TOKEN}
+        {token_arg}
         """)
         os.system(f'rm -rf {self.final_out_path}/cache')
         return self.final_out_path 

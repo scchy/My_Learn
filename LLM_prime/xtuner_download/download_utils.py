@@ -17,7 +17,11 @@ from concurrent.futures import ThreadPoolExecutor
 from huggingface_hub.hf_api import HfApi, get_session, hf_raise_for_status
 
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-TOKEN = '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'
+# HuggingFace Token：从环境变量读取，不再硬编码（避免泄露后被扫走）
+#   export HF_TOKEN=hf_xxx      # 或写入同目录 .env 后 source .env
+TOKEN = os.environ.get('HF_TOKEN') or os.environ.get('HUGGINGFACE_TOKEN') or ''
+if not TOKEN:
+    print('[WARN] 未检测到 HF_TOKEN 环境变量，将以匿名身份访问 HuggingFace（私有仓库会 401）')
 
 def get_hf_cache_files(folder_path):
     all_files = []

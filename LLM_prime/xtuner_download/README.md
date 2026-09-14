@@ -64,7 +64,16 @@ d_model.break_download()
 print('Yes')
 ```
 
-## 数据下载
+## 数据下载（dataset）
+
+> **凭据**：HuggingFace token 不再硬编码在代码里，而是从环境变量读取：
+>
+> ```bash
+> cp .env.example .env && vim .env      # 填入 HF_TOKEN=hf_xxx
+> set -a; source .env; set +a           # 或直接 export HF_TOKEN=hf_xxx
+> ```
+>
+> 未设置时会以匿名身份访问（公开模型/数据集可用，私有仓库会 401）。
 
 
 核心流程
