@@ -415,7 +415,7 @@ print(type(m).__name__, m.dimension)   # DashScopeEmbedding 1024=用API；TFIDFE
 - [ ] **修复 transformers 安装**（见坑 3），解锁 `EMBED_MODEL_TYPE=local` 与 chap03 的本地模型；修好后可用 `BAAI/bge-small-zh-v1.5`（512 维，免费离线）。
 - [ ] 想彻底离线：给 `embedding.py::TFIDFEmbedding` 的 `HashingVectorizer` 加 `analyzer="char", ngram_range=(1,2)`（中文按字切分），否则它对本任务等于不可用。
 - [x] **运行时产物已加 gitignore**（2026-09-14）：`.gitignore` 新增 `Hello-Agent/chap08/memory_data/` 和 `Hello-Agent/chap08/memory_data.bak_*/`，`git status` 里不再出现这两个目录。清理时直接 `rm -rf chap08/memory_data` 即可，首次运行会自动重建。
-- [ ] 旧的 1000 维数据备份在 `chap08/memory_data.bak_20260910/`，已忽略但文件仍在，确认无用即可删。另发现 `My_Learn/memory_data/`（仓库根目录）存在一份早期数据，非本次生成，尚未加入 ignore，按需处理。
+- [ ] 旧的 1000 维数据备份在 `chap08/memory_data.bak_20260910/`，已忽略但文件仍在，确认无用即可删。`My_Learn/memory_data/`（仓库根目录）的早期数据同样已被忽略（2026-09-14 起改为通用规则 `memory_data/` + `memory_data.bak_*/`，含仓库根与 chap08），文件仍在，按需删除。
 
 ---
 
