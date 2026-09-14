@@ -153,8 +153,8 @@ deepspeed_runs/
 # ============================================
 
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
 secrets.json
@@ -200,7 +200,14 @@ temp/
 *.rar
 *.7z
 
+# 电子书 / 文档
+*.pdf
+
 
 
 # mini-coding-agent sessions
 Hello-Agent/mini-code/.mini-coding-agent/sessions/
+
+# Hello-Agent chap08 memory data
+Hello-Agent/chap08/memory_data/
+Hello-Agent/chap08/memory_data.bak_*/
