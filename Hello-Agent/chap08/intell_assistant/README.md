@@ -33,26 +33,30 @@ cd /home/scc/sccWork/myGitHub/My_Learn/Hello-Agent/chap08/intell_assistant
 
 | 区域 | 功能 |
 |---|---|
-| 左侧 ① | 用户 ID（按用户隔离记忆与知识库 namespace）、清空对话 |
+| 左侧 ① | 用户 ID（按用户隔离记忆与知识库 namespace）、数据隔离模式（namespace / collection，习题 4.3）、清空对话 |
 | 左侧 ② | 上传文档 → 解析/分块/向量化入库，可调 `chunk_size` / `chunk_overlap` |
 | 左侧 ③ | 直接补录一段文本知识（`add_text`，免上传文件） |
-| 左侧 ④ | 高级检索开关（MQE + HyDE）、召回条数 |
-| 左侧 ⑤ | 记忆摘要 / 记忆统计 / 知识库统计 / 召回测试 / 导出报告 JSON |
-| 主区域 | 对话流：提问 → 检索增强生成 → 自动沉淀记忆 |
+| 左侧 ④ | 检索路由（auto / rag / memory / hybrid，习题 4.1）、高级检索开关（MQE + HyDE）、召回条数 |
+| 左侧 ⑤ | 记忆摘要 / 记忆统计 / 知识库统计 / **智能学习报告**（习题 4.2）/ **隔离自检**（习题 4.3）/ 召回测试 / 导出报告 JSON |
+| 主区域 | 对话流：提问 → 智能路由 → 检索增强生成 → 自动沉淀记忆（回答下方显示路由决策与理由） |
 
 ## 后端 API（本 fork 的正确姿势）
 
 ```python
 from bot import PDFLearningAssistant
 
-bot = PDFLearningAssistant(user_id="scc")
-bot.load_document("xx.pdf", chunk_size=1000, chunk_overlap=200)   # -> {"success", "message", ...}
+bot = PDFLearningAssistant(user_id="scc")                       # isolation_mode="namespace"(默认) | "collection"
+bot.load_document("xx.pdf", chunk_size=1000, chunk_overlap=200) # -> {"success", "message", ...}
 bot.add_text("RAG 是……", "rag_intro")                            # 免文件补录
-bot.ask("RAG 是什么？", enable_advanced_search=True, limit=5)      # -> {"success", "answer", "elapsed"}
-bot.recall("前端工程师", limit=5, memory_type="episodic")          # 记忆召回（不调 LLM）
+bot.route_question("我之前学了什么？")                            # 4.1 -> {"route": "memory", "reason": ..., "probe": ...}
+bot.ask("RAG 是什么？", route="auto", limit=5)                   # -> {"success", "answer", "route", "reason", "elapsed"}
+bot.recall("前端工程师", limit=5, memory_type="episodic")        # 记忆召回（不调 LLM）
 bot.memory_summary(); bot.memory_stats(); bot.rag_stats()
-bot.generate_report("report.json")
+bot.generate_report(with_llm=True)                              # 4.2 -> {"trajectory", "topics", "blind_spots", "recommendations", "llm_summary", ...}
+bot.verify_isolation()                                          # 4.3 -> {"rag_isolated", "memory_isolated", "passed", ...}
 ```
+
+端到端验证：`/home/scc/anaconda3/envs/LLM/bin/python3 test_exercise4.py`（覆盖 4.1 路由判定与三路作答、4.2 报告结构/盲点、4.3 双模式隔离，15 项断言）。
 
 ## 与书稿（官方 hello-agents）的接口差异 ⚠️
 
@@ -73,8 +77,14 @@ bot.generate_report("report.json")
 - **`Storage folder ... is already accessed by another instance`**：嵌入式 Qdrant 是"目录锁"。
   Streamlit 里已用 `@st.cache_resource` 保证单实例；若同时在 REPL 里开着 `MemoryTool`，先退出 REPL。
   彻底解决：起 Docker `qdrant/qdrant` 并在 `.env` 配 `QDRANT_URL`。
+- **`QdrantLocal instance is closed`（同进程第 2+ 个助手实例全挂）**：本 fork 的库 bug——
+  `QdrantVectorStore.__del__` 在任意实例被 GC 时会关掉**进程级共享**的嵌入式 client。
+  已在 fork 修复（`__del__` 不再关共享 client；缓存命中前先探活，失效自动重建），
+  多用户切换 / `verify_isolation` 因此才能同进程跑通。
 - **检索结果恒为空 / 相似度 0.0**：embedding 掉到了哈希兜底（中文不可用），检查 `chap08/.env` 的 `EMBED_*`，
   并确认 `QDRANT_VECTOR_SIZE` 与 embedding 维度一致（DashScope `text-embedding-v3` = 1024）。
   维度对不上时删掉 `chap08/memory_data/qdrant_local/` 重建。
+  另注意 `.env` 里 `EMBED_API_KEY=${ALI_API_KEY}` 依赖 shell 已导出该变量，未导出会静默掉到兜底。
 - **大 PDF 很慢**：`add_document` 会按 `chunk_size` 逐块 embedding，170 页的书稿建议先调大 `chunk_size` 或分段入库。
 - **换了用户名后检索不到旧文档**：`rag_namespace = pdf_{user_id}`，换 ID 即换命名空间，这是有意隔离。
+  同理，namespace 模式与 collection 模式的数据互不可见，切换隔离模式等于换库。
