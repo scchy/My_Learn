@@ -26,6 +26,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(CHAP_DIR / ".env")
 
+import _qdrant_embedded  # noqa: E402,F401  # 0.2.8 补丁：QDRANT_PATH 设置时走嵌入式本地模式
 from hello_agents.memory.embedding import get_text_embedder  # noqa: E402
 from hello_agents.memory.storage.neo4j_store import Neo4jGraphStore  # noqa: E402
 from hello_agents.memory.storage.qdrant_store import QdrantConnectionManager  # noqa: E402

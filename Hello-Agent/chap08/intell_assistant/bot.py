@@ -7,9 +7,10 @@
 # ===========================================================================================
 """PDF/文档学习助手：加载文档 -> 检索问答 -> 记忆沉淀。
 
-与书稿（官方 hello-agents）的接口差异，本文件已按当前 fork 0.2.9 适配，勿照抄书稿：
+与书稿描述的接口差异，本文件已按官方 hello-agents 0.2.8 适配：
 
-1. 工具只有 `tool.run({"action": ...})`，**没有** `execute()`；
+1. 工具统一走 `tool.run({"action": ...})` 字典传参（Tool 基类标准接口；
+   `execute(action, **kwargs)` 也存在，但 run() 才是对外的统一入口）；
 2. `MemoryTool` 构造参数没有 `session_id`，会话 id 靠 `memory_tool.current_session_id` 注入；
 3. `run()` 按固定字段取参，多传的 key（如 event_type/concept）会被**静默丢弃**；
 4. `RAGTool.add_document()` 返回的是**字符串**，不是 dict（原写法 result.get("success") 会炸）；
@@ -31,6 +32,7 @@
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -45,6 +47,10 @@ from dotenv import load_dotenv
 CHAP_DIR = Path(__file__).resolve().parent.parent
 os.chdir(CHAP_DIR)
 load_dotenv(CHAP_DIR / ".env")
+
+# shim 在 chap08 目录而本文件在 intell_assistant/ 下，补一下搜索路径
+sys.path.insert(0, str(CHAP_DIR))
+import _qdrant_embedded  # noqa: E402,F401  # 0.2.8 补丁：QDRANT_PATH 设置时走嵌入式本地模式
 
 from hello_agents.tools import MemoryTool, RAGTool  # noqa: E402
 

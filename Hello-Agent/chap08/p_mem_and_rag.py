@@ -4,7 +4,8 @@
 # Reference: https://datawhalechina.github.io/hello-agents/#/./chapter8/%E7%AC%AC%E5%85%AB%E7%AB%A0%20%E8%AE%B0%E5%BF%86%E4%B8%8E%E6%A3%80%E7%B4%A2?id=_833-%e5%bf%ab%e9%80%9f%e4%bd%93%e9%aa%8c%ef%bc%9a30%e7%a7%92%e4%b8%8a%e6%89%8brag%e5%8a%9f%e8%83%bd
 # 运行: /home/scc/anaconda3/envs/LLM/bin/python3 p_mem_and_rag.py
 # 说明: 配置见同目录 .env（已固化嵌入式 Qdrant + DashScope embedding）
-#       本 fork 的工具只支持 tool.run({"action": ...}) 字典传参，没有 execute()
+#       本文件按官方 hello-agents 0.2.8 适配；工具统一走 Tool 基类接口
+#       tool.run({"action": ...}) 字典传参（execute(action, **kwargs) 也可用）
 # ===========================================================================================
 
 
@@ -20,12 +21,14 @@ CHAP_DIR = Path(__file__).resolve().parent
 os.chdir(CHAP_DIR)
 load_dotenv(CHAP_DIR / ".env")
 
+import _qdrant_embedded  # noqa: E402,F401  # 0.2.8 补丁：QDRANT_PATH 设置时走嵌入式本地模式
 from hello_agents import SimpleAgent, HelloAgentsLLM, ToolRegistry  # noqa: E402
 from hello_agents.tools import MemoryTool, RAGTool  # noqa: E402
 
 
 # LLM
-llm = HelloAgentsLLM(model_name=os.getenv("LLM_MODEL_ID", "deepseek-v4-flash"), temperature=1.0)
+# 0.2.8 参数名是 model（fork 里才改成 model_name）；不传也能从 LLM_MODEL_ID 环境变量读到
+llm = HelloAgentsLLM(model=os.getenv("LLM_MODEL_ID", "deepseek-v4-flash"), temperature=1.0)
 
 
 # ===========================================================================================
