@@ -6,7 +6,7 @@
 - 构建：什么样的上下文配置，最有可能让模型产出我们期望的行为？
 - 目标：在推理阶段，如何策划与维护“最优的信息集合（tokens） 
 
-
+![](./pic/image.png)
 
 ## 9.2 为什么上下文工程重要
 
@@ -980,7 +980,62 @@ def _delete_note(self, note_id: str):
 
 ## 9.5 TerminalTool: 即时文件系统访问
 
+就是执行shell 命令和sandbox 
 
+## 9.6 长程智能体实战：代码库维护助手
+
+系统框架设计
+
+```mermaid
+flowchart LR
+  subgraph APP[应用层 - Application Layer]
+    CM[CodebaseMaintainer<br>长程智能体主控类]
+    CM_INFO["- 会话管理<br>- 任务协调<br>- 决策逻辑"]
+    CM --- CM_INFO
+  end
+
+  subgraph CTX[上下文管理层 - Context Management Layer]
+    CB[ContextBuilder<br>上下文管理器]
+    GSSC[GSSC Pipeline]
+
+    subgraph GSSC_FLOW[GSSC]
+      direction LR
+      G[Gather<br>汇集笔记、记忆、终端输出]
+      S[Select<br>基于相关性和新近性筛选]
+      ST[Structure<br>组织为标准模板]
+      CP[Compress<br>超限压缩]
+      G --> S --> ST --> CP
+    end
+
+    CB --> GSSC
+    GSSC --> G
+  end
+
+  subgraph TOOL[工具层 - Tool Layer]
+    direction TB
+    NOTE[NoteTool<br>持久化笔记]
+    NOTE_INFO["- 任务状态<br>- 发现的问题<br>- 重构计划<br>- 关键决策"]
+    NOTE -.-> NOTE_INFO
+
+    TERM[TerminalTool<br>即时文件访问]
+    TERM_INFO["- ls, cat, grep<br>- find, head<br>- wc, sort<br>- 目录导航"]
+    TERM -.-> TERM_INFO
+
+    MEM[MemoryTool<br>对话记忆]
+    MEM_INFO["- 工作记忆<br>- 情景记忆<br>- 语义记忆"]
+    MEM -.-> MEM_INFO
+  end
+
+  CM --> CB
+  GSSC --> NOTE
+  GSSC --> TERM
+  GSSC --> MEM
+
+  NOTE --> TERM
+  TERM --> MEM
+```
+
+[详细代码](96_coding_agent.py)
 
 
 
