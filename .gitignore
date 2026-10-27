@@ -140,6 +140,9 @@ deepspeed_runs/
 *.tiff
 *.webp
 
+# 例外：文档配图目录允许跟踪
+!Hello-Agent/chap09/pic/**
+
 # 视频
 *.mp4
 *.avi

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Author: scc_hy
-# Func: 9.3.4 ContextBuilder + 上下文质量评估（规则引擎 + LLM 增强层）
+# Func: 9.3.4 ContextBuilder + 上下文质量评估（规则引擎 + LLM 增强层）+ 习题 2.3 混合级联压缩
 # Run : /home/scc/anaconda3/envs/LLM/bin/python3 context_quality_evaluator.py
 #       加 --no-llm 可关闭 LLM，退回纯规则模式（零 API 成本）
 """
@@ -22,10 +22,14 @@ context_quality_evaluator.py
      a) 相关性打分：一次批量调用替代逐包关键词 Jaccard（弥补中文/同义表述失配）；
      b) 建议生成：基于 Trace+指标复核，发现规则覆盖不到的内容级问题。
    LLM 不可用或调用失败时自动回退纯规则，脚本永远可独立运行。
+4. HybridCascadeContextBuilder（习题 2.3）：把 Compress 升级为 S0-S5 级联——
+   无损去重 → 价值驱逐 → 分通道滑窗 → LLM 摘要回收 → 存活率校验 → 硬截断兜底；
+   Trace 记录每级触发情况与查询覆盖率存活率（比 token 差值更真实的压缩保真度量）。
 """
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
+import hashlib
 import json
 import math
 import os
@@ -65,6 +69,7 @@ class ContextConfig:
     # --- 新增：LLM 增强（不可用时自动回退纯规则） ---
     llm_relevance: bool = True      # 相关性打分用 LLM 批量评估（替代关键词 Jaccard）
     llm_suggestions: bool = True    # 规则建议之上叠加 LLM 复核建议
+    llm_compression: bool = True    # 级联压缩 S3 用 LLM 摘要回收（关闭则退化为确定性 S0-S2+S5）
 
     def __post_init__(self):
         assert 0.0 <= self.reserve_ratio <= 1.0, "reserve_ratio 必须在 [0, 1] 范围内"
@@ -246,6 +251,11 @@ class SelectionTrace:
     compressed: bool = False
     compressed_loss_tokens: int = 0
     relevance_engine: str = "keyword"   # 相关性打分方式：keyword（Jaccard）| llm
+    # ---- 级联压缩（HybridCascadeContextBuilder，习题 2.3） ----
+    compression_stages: List[str] = field(default_factory=list)  # 实际触发的级：S0..S5
+    dedup_removed: int = 0            # S0 无损去重移除的包数
+    summarized_packets: int = 0       # S3 摘要回收的包数
+    query_cov_survival: float = 1.0   # S4 压缩前后查询覆盖率之比（信息存活率）
 
 
 @dataclass
@@ -276,7 +286,8 @@ class ContextQualityReport:
             f"[平均相关性 {m['mean_relevance']:.2f} | 查询覆盖率 {m['query_coverage']:.2f}]",
             f"  完整性  : {self.completeness:.2f}  "
             f"[来源覆盖 {m['source_coverage']:.2f} | 入选率 {m['selection_yield']:.2f} | "
-            f"预算截断 {'是' if m['truncated'] else '否'} | 压缩损失 {int(m['compressed_loss_tokens'])} tokens]",
+            f"预算截断 {'是' if m['truncated'] else '否'} | 压缩损失 {int(m['compressed_loss_tokens'])} tokens | "
+            f"覆盖存活 {m['query_cov_survival']:.2f}]",
             "-" * 60,
             "诊断:",
         ]
@@ -552,6 +563,7 @@ class QualityAwareContextBuilder(ContextBuilder):
             "selection_yield": round(yield_ratio, 4),
             "truncated": 1.0 if truncated else 0.0,
             "compressed_loss_tokens": float(t.compressed_loss_tokens),
+            "query_cov_survival": round(t.query_cov_survival, 4),
         }
         diagnostics = self._diagnostics(t, metrics)
         suggestions = self._suggest(t, metrics)
@@ -577,6 +589,10 @@ class QualityAwareContextBuilder(ContextBuilder):
         if t.compressed:
             d.append(f"压缩触发：{t.tokens_before_compress} → {t.tokens_after_compress} tokens，"
                      f"损失 {t.compressed_loss_tokens} tokens")
+        if t.compression_stages:
+            d.append(f"级联压缩: {' → '.join(t.compression_stages)}"
+                     f"（去重移除 {t.dedup_removed} 包，摘要回收 {t.summarized_packets} 包，"
+                     f"覆盖率存活 {t.query_cov_survival:.2f}）")
         if t.dropped_by_budget:
             top = t.dropped_by_budget[0][1]
             d.append(f"被预算丢弃的最高分信息: {top.content[:40]}...")
@@ -593,6 +609,10 @@ class QualityAwareContextBuilder(ContextBuilder):
         if t.compressed_loss_tokens > 0:
             s.append(f"压缩丢失 {t.compressed_loss_tokens} tokens → 优先保召回："
                      f"对 [Context] 分区用 LLM 摘要替代硬截断；缓存静态内容避免重复占用预算")
+        # 2b) 信息存活率：比 token 差值更真实的保真度量（摘要式压缩下 token 差值会虚高）
+        if m.get("query_cov_survival", 1.0) < 0.8 and t.compressed:
+            s.append(f"压缩后查询覆盖率存活率 {m['query_cov_survival']:.2f} 偏低 → "
+                     f"回答查询所需的关键概念在压缩中丢失，检查摘要质量或降低压缩强度")
         # 3) 密度与冗余
         if m["redundancy"] > self.T_REDUNDANCY_HIGH:
             s.append(f"入选信息冗余度 {m['redundancy']:.2f} 偏高 → 在 Gather 阶段按内容哈希去重，"
@@ -621,13 +641,227 @@ class QualityAwareContextBuilder(ContextBuilder):
 
 
 # ----------------------------------------------------------------------
+# 混合级联压缩（习题 2.3 实现）
+# ----------------------------------------------------------------------
+
+class HybridCascadeContextBuilder(QualityAwareContextBuilder):
+    """S0-S5 级联压缩器：把书中「超限硬截断」的 Compress 升级为多机制级联。
+
+    设计原则（习题 2.3）：无损优先于有损、确定性优先于生成式、
+    生成式只作升级手段且必有确定性兜底；每级只在仍超预算时进入下一级。
+
+    级联各级：
+      S0 无损去重        词集 Jaccard ≥ 阈值视为重复（含完全相同），保留分高者
+      S1 价值驱逐        综合分 < EVICT_BAR 的包直接逐出（便宜的确定性垃圾清理）
+      S2 分通道滑窗      对话历史保留最近 K 条 + 最前 1 条锚点（首因效应），中段入池；
+                         超长包 head+tail 截中段；仍超预算则按分数升序继续逐出
+      S3 摘要回收        用省出的预算把被逐内容压成一条摘要塞回（绝不超预算），
+                         按内容哈希缓存，LLM 不可用则静默跳过
+      S4 存活率校验      压缩后查询覆盖率 / 压缩前 ≥ SURVIVAL_MIN 才接受摘要，
+                         不过关丢弃摘要回退确定性结果
+      S5 硬截断兜底      任何未解决的溢出交给书中原版截断，绝对保证预算合规
+
+    保护名单（任何一级不动）：系统指令（[Task] 里的查询由 _structure 恒定保留）；
+    最新对话轮因 recency 加权天然最后被逐出。
+    """
+
+    # ---- 级联参数（可按任务调整的旋钮） ----
+    DEDUP_JACCARD = 0.75       # S0 近重复阈值
+    EVICT_BAR = 0.45           # S1 低于此综合分直接逐出
+    HISTORY_KEEP_LAST = 3      # S2 对话历史保留最近 K 条
+    HISTORY_ANCHOR = 1         # S2 额外保留最前 1 条（任务定义锚点）
+    OVERSIZED_TOKENS = 80      # S2 超长包阈值 → head+tail 截中段
+    HEAD_RATIO, TAIL_RATIO = 0.5, 0.25
+    DIGEST_MIN_SLACK = 20      # S3 剩余预算低于此值不值得调 LLM
+    SUMMARIZE_MIN_SCORE = 0.30 # S3 只回收价值达标的被逐包（低于它的视为纯噪声丢弃）
+    SURVIVAL_MIN = 0.80        # S4 查询覆盖率存活率下限
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_query = ""
+        self._summary_cache: Dict[str, str] = {}   # 内容哈希 → 摘要（摊薄 LLM 成本）
+
+    def build(self, user_query: str, **kwargs) -> str:
+        self._last_query = user_query   # 级联各级重建/校验都需要查询
+        return super().build(user_query, **kwargs)
+
+    # ================= 级联主流程 =================
+
+    def _compress(self, context: str, max_tokens: int) -> str:
+        t = self.last_trace
+        before = self._count_tokens(context)
+        if t is None or before <= max_tokens:
+            return context
+        t.tokens_before_compress = before
+        t.compression_stages = ["S0"]
+
+        kept, pool = self._s0_dedup(list(t.selected)), []
+        if not self._fits(kept, max_tokens):
+            t.compression_stages.append("S1")
+            kept, pool = self._s1_evict(kept)
+        if not self._fits(kept, max_tokens):
+            t.compression_stages.append("S2")
+            kept, more = self._s2_window(kept, max_tokens)
+            pool += more
+
+        # S3+S4：把被逐内容以摘要形式回收（利用省出的预算，不破坏预算合规）
+        if pool and self.config.llm_compression:
+            sp = self._s3_digest(pool, max_tokens - self._count_tokens(self._rebuild(kept)))
+            if sp is not None:
+                t.compression_stages.append("S3")
+                cand = kept + [sp]
+                t.compression_stages.append("S4")
+                cov0 = self._query_coverage(context)
+                cov1 = self._query_coverage(self._rebuild(cand))
+                survival = cov1 / max(cov0, 1e-9)
+                if survival >= self.SURVIVAL_MIN:
+                    kept, t.summarized_packets = cand, sp.metadata["provenance"]
+                else:
+                    print(f"[S4] 覆盖率存活率 {survival:.2f} < {self.SURVIVAL_MIN:.2f}，"
+                          f"丢弃摘要回退确定性结果")
+        return self._finish(kept, context, before, max_tokens)
+
+    def _fits(self, kept: List[ContextPacket], max_tokens: int) -> bool:
+        return self._count_tokens(self._rebuild(kept)) <= max_tokens
+
+    def _rebuild(self, kept: List[ContextPacket]) -> str:
+        """从存活包重建结构化上下文（复用书中 Structure，保证格式一致）"""
+        return self._structure(kept, self._last_query)
+
+    def _query_coverage(self, text: str) -> float:
+        """查询词项在 text 中的覆盖率（S4 存活率的分子/分母）"""
+        terms = _query_terms(self._last_query)
+        if not terms:
+            return 1.0
+        low = text.lower()
+        return len({x for x in terms if x in low}) / len(terms)
+
+    # ---- S0 无损去重 ----
+    def _s0_dedup(self, packets: List[ContextPacket]) -> List[ContextPacket]:
+        """词集 Jaccard ≥ DEDUP_JACCARD 视为重复（完全相同 Jaccard=1 自然覆盖），
+        保留综合分高者；移除后恢复 Select 的原始顺序"""
+        t = self.last_trace
+        assert t is not None, "_s0_dedup 只应由 _compress 在 Trace 存在时调用"
+        ordered = sorted(packets, key=self._combined_score, reverse=True)
+        kept, seen = [], []
+        for p in ordered:
+            tk = _tokenize(p.content)
+            dup = any((tk | s) and len(tk & s) / len(tk | s) >= self.DEDUP_JACCARD
+                      for s in seen)
+            if dup:
+                t.dedup_removed += 1
+                continue
+            seen.append(tk)
+            kept.append(p)
+        order = {id(p): i for i, p in enumerate(packets)}
+        kept.sort(key=lambda p: order[id(p)])
+        return kept
+
+    # ---- S1 价值驱逐 ----
+    def _s1_evict(self, packets: List[ContextPacket]) -> Tuple[List[ContextPacket], List[ContextPacket]]:
+        """低于 EVICT_BAR 的包直接逐出（确定性垃圾清理，零 LLM 成本）"""
+        protected = [p for p in packets if p.metadata.get("type") == "system_instruction"]
+        others = [p for p in packets if p.metadata.get("type") != "system_instruction"]
+        pool = [p for p in others if self._combined_score(p) < self.EVICT_BAR]
+        keep = [p for p in others if self._combined_score(p) >= self.EVICT_BAR]
+        return protected + keep, pool
+
+    # ---- S2 分通道滑窗 ----
+    def _s2_window(self, packets: List[ContextPacket],
+                   max_tokens: int) -> Tuple[List[ContextPacket], List[ContextPacket]]:
+        """对话历史留尾 K 条 + 首条锚点，中段入池；超长包 head+tail 截中段；
+        仍超预算则按分数升序继续逐出——确定性保证装得下的部分一定装得下"""
+        protected = [p for p in packets if p.metadata.get("type") == "system_instruction"]
+        others = [p for p in packets if p.metadata.get("type") != "system_instruction"]
+        pool = []
+        # 1) 历史窗口：Gather 按对话顺序追加，Select 稳定排序保持该相对顺序
+        hist_idx = [i for i, p in enumerate(others)
+                    if p.metadata.get("type") == "conversation_history"]
+        keep_n = self.HISTORY_KEEP_LAST + self.HISTORY_ANCHOR
+        if len(hist_idx) > keep_n:
+            drop = set(hist_idx[self.HISTORY_ANCHOR:len(hist_idx) - self.HISTORY_KEEP_LAST])
+            pool = [others[i] for i in sorted(drop)]
+            others = [p for i, p in enumerate(others) if i not in drop]
+        # 2) 超长包 head+tail（保两端逐字保真，丢中段）
+        for p in others:
+            if p.token_count > self.OVERSIZED_TOKENS:
+                p.content = self._head_tail(p.content)
+                p.token_count = self._count_tokens(p.content)
+        # 3) 仍装不下：价值升序继续逐出，直到装下
+        if not self._fits(protected + others, max_tokens):
+            others = sorted(others, key=self._combined_score)
+            while others and not self._fits(protected + others, max_tokens):
+                pool.append(others.pop(0))
+        return protected + others, pool
+
+    def _head_tail(self, text: str) -> str:
+        h, tl = int(len(text) * self.HEAD_RATIO), int(len(text) * self.TAIL_RATIO)
+        return text[:h] + "\n[... 中段省略（head+tail 保两端）...]\n" + (text[-tl:] if tl else "")
+
+    # ---- S3 摘要回收 ----
+    def _s3_digest(self, pool: List[ContextPacket], slack: int) -> Optional[ContextPacket]:
+        """把被逐的旧材料压成一条摘要，塞回剩余预算（slack）内。
+        只回收价值达标的包；摘要按 (内容+查询) 哈希缓存，命中零成本；
+        LLM 不可用 / slack 不足 / 调用失败 一律返回 None（级联自动退化为 S0-S2+S5）"""
+        worth = [p for p in pool if self._combined_score(p) >= self.SUMMARIZE_MIN_SCORE]
+        if not worth or slack < self.DIGEST_MIN_SLACK:
+            return None
+        key = hashlib.md5(("|".join(p.content for p in worth) + "||" + self._last_query)
+                          .encode("utf-8")).hexdigest()
+        if key in self._summary_cache:
+            summary = self._summary_cache[key]
+        else:
+            llm = self._get_llm()
+            if llm is None:
+                return None
+            items = "\n".join(f"[{i}] {p.content[:150]}" for i, p in enumerate(worth, 1))
+            prompt = (f"把以下 {len(worth)} 条较旧的对话/记忆压缩成一段不超过 {max(30, slack)} tokens 的要点，"
+                      "用于放回 LLM 上下文。要求：保留与查询相关的关键事实；"
+                      "数字/ID/文件名逐字保留；只输出要点正文，不要解释。\n\n"
+                      f"用户查询：{self._last_query}\n\n" + items)
+            try:
+                # 不设 max_tokens 上限：flash 模型内部推理计入补全额度，上限过小会返回空串
+                summary = llm.invoke([{"role": "user", "content": prompt}]).strip()
+                self._summary_cache[key] = summary
+            except Exception as e:
+                print(f"[WARNING] S3 摘要失败，退化为丢弃+截断: {e}")
+                return None
+        n = self._count_tokens(summary)
+        if n > slack:   # 摘要超了剩余预算：截到装得下（保真降级，S4 仍会校验）
+            summary = self._truncate_text(summary, slack)
+            n = self._count_tokens(summary)
+        return ContextPacket(f"[摘要回收 x{len(worth)}] {summary}", datetime.now(),
+                             max(n, 1), 0.75,
+                             {"type": "summary", "provenance": len(worth)})
+
+    # ---- S5 兜底 ----
+    def _finish(self, kept: List[ContextPacket], context: str,
+                before: int, max_tokens: int) -> str:
+        """任何一级没解决的溢出，交给书中原版截断按 section 边界处理；
+        并以最初上下文为基准记录压缩统计与覆盖率存活率"""
+        t = self.last_trace
+        assert t is not None, "_finish 只应由 _compress 在 Trace 存在时调用"
+        rebuilt = self._rebuild(kept)
+        out = super()._compress(rebuilt, max_tokens)   # S5：硬截断兜底
+        after = self._count_tokens(out)
+        if after < self._count_tokens(rebuilt):
+            t.compression_stages.append("S5")
+        t.tokens_before_compress, t.tokens_after_compress = before, after
+        t.compressed = after < before
+        t.compressed_loss_tokens = max(0, before - after)
+        cov0, cov1 = self._query_coverage(context), self._query_coverage(out)
+        t.query_cov_survival = cov1 / max(cov0, 1e-9)
+        return out
+
+
+# ----------------------------------------------------------------------
 # 演示
 # ----------------------------------------------------------------------
 
 def _demo():
     from datetime import timedelta
     use_llm = "--no-llm" not in sys.argv
-    llm_cfg = dict(llm_relevance=use_llm, llm_suggestions=use_llm)
+    llm_cfg = dict(llm_relevance=use_llm, llm_suggestions=use_llm, llm_compression=use_llm)
     print(f"LLM 增强层：{'开启（批量相关性打分 + 建议复核）' if use_llm else '关闭（--no-llm，纯规则零成本）'}")
     now = datetime.now()
     sys_prompt = "You are a senior Python data engineering consultant."
@@ -686,6 +920,35 @@ def _demo():
     b3.build("How to optimize pandas memory usage?",
              conversation_history=history, system_instructions=sys_prompt,
              custom_packets=_mk_packets(with_dup=True))
+
+    print("\n########## 场景 4：混合级联压缩（习题 2.3） ##########")
+    long_history = [
+        {"role": "user", "content": "I am building a data analysis tool with Python and pandas"},
+        {"role": "assistant", "content": "Pandas is a solid choice for data wrangling."},
+        {"role": "user", "content": "The CSV reader works but RAM usage explodes on big files"},
+        {"role": "assistant", "content": "Likely object dtype; consider category and downcasting."},
+        {"role": "user", "content": "Also the merge step creates huge intermediate copies"},
+        {"role": "assistant", "content": "Merge on category keys and avoid full-frame copies."},
+        {"role": "user", "content": "I finished the CSV reading module last week"},
+        {"role": "assistant", "content": "Great, next step is profiling with memory_usage()."},
+    ]
+    # 低价值包：S1 的价值驱逐目标（综合分 < EVICT_BAR 0.45）
+    junk = [
+        ContextPacket("The team had a pizza party last Friday and everyone enjoyed it.",
+                      now - timedelta(days=2), 12, 0.2, {"type": "memory"}),
+        ContextPacket("Office moved to the 3rd floor, update the address book.",
+                      now - timedelta(days=3), 11, 0.3, {"type": "memory"}),
+        ContextPacket("Yesterday I chatted with Sarah about weekend plans, then we walked "
+                      "to the new coffee shop downtown and discussed vacation ideas for "
+                      "the upcoming summer holiday trip. She recommended visiting Kyoto.",
+                      now - timedelta(days=2), 44, 0.3, {"type": "memory"}),
+    ]
+    # reserve_ratio 调小让 Select 放进全部候选，把裁剪留给级联各级演示
+    b4 = HybridCascadeContextBuilder(
+        config=ContextConfig(max_tokens=175, reserve_ratio=0.05, min_relevance=0.1, **llm_cfg))
+    b4.build("How to optimize pandas memory usage?",
+             conversation_history=long_history, system_instructions=sys_prompt,
+             custom_packets=_mk_packets() + junk)
 
 
 if __name__ == "__main__":
